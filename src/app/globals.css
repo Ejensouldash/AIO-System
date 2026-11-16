@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background-color: #ffffff !important;
+  color: #171717 !important;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* ===== PRINT STYLES ===== */
+@page {
+  size: A4 portrait;
+  margin: 8mm 10mm;
+}
+
+@media print {
+  html, body {
+    background: white !important;
+    color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  tr, .sig-box, .sig-section, .info-card {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .sig-box, .sig-section {
+    break-inside: avoid !important;
+  }
+
+  .print-compact-table {
+    width: 100% !important;
+    margin-top: 0 !important;
+    margin-bottom: 0 !important;
+    border-collapse: collapse !important;
+    border: 1px solid black !important;
+  }
+
+  .print-compact-table th,
+  .print-compact-table td {
+    padding: 2px 3px !important;
+    font-size: 8px !important;
+    line-height: 1.1 !important;
+    border: 1px solid black !important;
+  }
+
+  .print-compact-table tbody tr:not(.verification-row) {
+    height: 24px !important;
+  }
+
+  .print-compact-table tbody tr.verification-row,
+  .print-compact-table tbody tr.verification-row td {
+    height: 56px !important;
+    border: 1px solid black !important;
+  }
+
+  .page-break {
+    break-after: page;
+    page-break-after: always;
+  }
+}

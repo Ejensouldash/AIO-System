@@ -1,0 +1,815 @@
+export const dynamic = "force-dynamic"
+
+import React, { Suspense } from "react"
+import { auth } from "@/auth"
+import { redirect } from "next/navigation"
+import { getDailyReportById } from "@/app/actions/dailyReport"
+import Link from "next/link"
+import { ArrowLeft, CheckCircle2, AlertTriangle, Save, ClipboardList, Package } from "lucide-react"
+import { PrintButton } from "@/components/ui/PrintButton"
+import { ApprovalSignatureModal } from "@/components/forms/ApprovalSignatureModal"
+import { DeleteReportButton } from "@/components/forms/DeleteReportButton"
+import { ExportDailyReportButton } from "@/components/forms/ExportDailyReportButton"
+import { SharePDFButton } from "@/components/ui/SharePDFButton"
+import { prisma } from "@/lib/prisma"
+import { getAccessInfo, hasAnyModule } from "@/lib/access"
+import { Metadata } from "next"
+
+// CAP conversion constants (must stay in sync with DailyReportForm)
+const CAP_PCS_PER_BOX = 4000
+const CAP_BOX_WEIGHT_KG = 0.88
+const CAP_KG_PER_PC = 0.002125
+
+const capPcsFromInput = (weight: number, boxes: number) => {
+  if (weight > 0 && boxes > 0) {
+    const net = weight - (boxes * CAP_BOX_WEIGHT_KG)
+    return net > 0 ? Math.round(net / CAP_KG_PER_PC) : 0
+  }
+  if (weight > 0) return Math.round(weight / CAP_KG_PER_PC)
+  if (boxes > 0) return boxes * CAP_PCS_PER_BOX
+  return 0
+}
+
+const isJsonLabelType = (labelType?: string | null) => !!labelType && labelType.trim().startsWith("{")
+
+// CAP usage rows stash their raw inputs (weight/boxes) as JSON in labelType — parse, never render raw
+const parseCapMeta = (labelType?: string | null) => {
+  if (!isJsonLabelType(labelType)) return null
+  try {
+    const p = JSON.parse(labelType!)
+    return { weight: Number(p.weight) || 0, boxes: Number(p.boxes ?? p.originalBags) || 0 }
+  } catch {
+    return null
+  }
+}
+
+// Effective used bags for a usage row; heals legacy CAP rows that were saved with bags=0
+const effectiveUsageBags = (u: any, sectionKey: string) => {
+  const bags = Number(u.bags) || 0
+  if (sectionKey !== 'CAP' || bags > 0) return bags
+  const meta = parseCapMeta(u.labelType)
+  if (!meta) return bags
+  const pcs = capPcsFromInput(meta.weight, meta.boxes)
+  return pcs > 0 ? pcs / (Number(u.mult) || CAP_PCS_PER_BOX) : 0
+}
+
+const fmtBags = (n: number) => Math.round(n * 100) / 100
+
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const resolvedParams = await params
+  const report = await prisma.dailyReport.findUnique({ where: { id: resolvedParams.id } })
+  
+  if (!report) return { title: 'Report Not Found' }
+  
+  const dateStr = new Date(report.date).toLocaleDateString('en-GB').replace(/\//g, '.')
+  const lineStr = report.line.replace(' - ', ' ')
+  
+  return {
+    title: `Daily Production Report ${lineStr} ${report.shift} Date ${dateStr}`
+  }
+}
+
+function ReportSkeleton() {
+  return (
+    <div className="min-h-screen bg-gray-400 p-4 sm:p-8 flex flex-col items-center">
+      <div className="w-full max-w-[210mm] bg-white min-h-[297mm] p-6 border-2 border-black space-y-6 animate-pulse">
+        <div className="h-20 bg-gray-200 rounded"></div>
+        <div className="h-32 bg-gray-100 rounded"></div>
+        <div className="h-64 bg-gray-100 rounded"></div>
+      </div>
+    </div>
+  )
+}
+
+export default async function ViewDailyReportPage({ params }: { params: Promise<{ id: string }> }) {
+  const session = await auth()
+  if (!session) redirect("/login")
+  const resolvedParams = await params
+
+  return (
+    <Suspense fallback={<ReportSkeleton />}>
+      <AsyncReportContent id={resolvedParams.id} session={session} />
+    </Suspense>
+  )
+}
+
+async function AsyncReportContent({ id, session }: { id: string; session: any }) {
+  // Read modules live from the DB, not the session JWT (which goes stale on grant)
+  const access = await getAccessInfo()
+  const canEditApproved = !!access && hasAnyModule(access, ["DAILY_REPORT_EDIT_APPROVED"])
+
+  const response = await getDailyReportById(id)
+  const report = response.data
+
+  if (!report) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+        <div className="bg-white p-8 border-4 border-black text-center max-w-md w-full">
+          <AlertTriangle className="h-16 w-16 mx-auto mb-4 text-red-500" />
+          <h1 className="text-2xl font-black uppercase mb-2 text-black">Report Not Found</h1>
+          <p className="text-gray-600 mb-6 font-bold">The report you are looking for does not exist or has been deleted.</p>
+          <Link href="/forms" className="inline-block bg-black text-white font-black uppercase tracking-widest px-6 py-3 border-b-4 border-r-4 border-transparent hover:border-black hover:bg-white hover:text-black transition-all">
+            Return to Dashboard
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  // Helper to group inventory items by section
+  const getInventoryForSection = (key: string) => report.inventory.filter((i: any) => i.sectionKey === key)
+
+  // Fetch Transfer In for the same date.
+  // Because receiveDate might be saved as UTC Midnight or GMT+8 depending on the input method,
+  // we fetch a 48h window and filter exactly in Malaysia Time (GMT+8) to prevent DOs from disappearing.
+  const toMalaysiaDateStr = (d: Date) => {
+    const offsetDate = new Date(new Date(d).getTime() + 8 * 60 * 60 * 1000)
+    return offsetDate.toISOString().split('T')[0]
+  }
+  const reportDateStr = toMalaysiaDateStr(report.date)
+
+  const startDate = new Date(report.date.getTime() - 24 * 60 * 60 * 1000)
+  const endDate = new Date(report.date.getTime() + 24 * 60 * 60 * 1000)
+
+  let allTransferIns = await prisma.transferIn.findMany({
+    where: { 
+      receiveDate: { gte: startDate, lte: endDate }
+    },
+    include: { items: true }
+  })
+
+  let transferIns = allTransferIns.filter(doItem => toMalaysiaDateStr(doItem.receiveDate) === reportDateStr)
+  
+  if (report.shift) {
+    transferIns = transferIns.filter((ti: any) => {
+      if (!ti.receiveTime) return true;
+      const hour = parseInt(ti.receiveTime.split(':')[0], 10);
+      if (isNaN(hour)) return true;
+      const isPM = hour >= 19;
+      if (report.shift.toUpperCase() === "AM" && isPM) return false;
+      if (report.shift.toUpperCase() === "PM" && !isPM) return false;
+      return true;
+    });
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-400 print:bg-white p-4 sm:p-8 print:p-0 print:m-0 font-sans pb-20 print:pb-0 flex flex-col items-center print:block">
+      <style>{`
+        @media print {
+          @page { size: A4 portrait; margin: 10mm; }
+          :root { color-scheme: light !important; }
+          body, html { 
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important; 
+            background-color: white !important; 
+            color: black !important; 
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+          .print-container {
+            -webkit-box-decoration-break: clone !important;
+            box-decoration-break: clone !important;
+          }
+        }
+      `}</style>
+      
+      {/* Header Actions - Hidden on Print */}
+      <div className="w-full max-w-[210mm] mb-6 flex flex-col sm:flex-row sm:items-center justify-between print:hidden gap-4">
+        <div className="flex items-center">
+          <Link href="/forms" className="inline-flex items-center text-sm font-black uppercase tracking-wider border-2 border-black px-4 py-2 bg-white hover:bg-black hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:shadow-none hover:translate-y-[2px] hover:translate-x-[2px] mr-4">
+            <ArrowLeft className="h-4 w-4 mr-2" /> Back
+          </Link>
+          <div className={`px-3 py-1.5 text-xs font-black uppercase border-2 flex items-center ${report.status === 'APPROVED' ? 'bg-emerald-100 text-emerald-800 border-emerald-800' : report.status === 'DRAFT' ? 'bg-blue-100 text-blue-800 border-blue-800' : report.status === 'REJECTED' ? 'bg-red-100 text-red-800 border-red-800' : 'bg-yellow-100 text-yellow-800 border-yellow-800'}`}>
+            {report.status === 'APPROVED' ? <CheckCircle2 className="w-4 h-4 mr-1.5"/> : report.status === 'DRAFT' ? <Save className="w-4 h-4 mr-1.5" /> : report.status === 'REJECTED' ? <AlertTriangle className="w-4 h-4 mr-1.5" /> : <AlertTriangle className="w-4 h-4 mr-1.5"/>}
+            {report.status}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {((session.user as any).trueRole === "SUPERADMIN" || (session.user as any).trueRole === "SUPERVISOR") && (
+            <DeleteReportButton reportId={report.id} />
+          )}
+          {(report.status === "PENDING" || report.status === "REJECTED" || report.status === "DRAFT" || (report.status === "APPROVED" && canEditApproved)) && (
+            <>
+              {report.status === "PENDING" && ((session.user as any).trueRole === "SUPERVISOR" || (session.user as any).trueRole === "SUPERADMIN") && (
+                <ApprovalSignatureModal reportId={report.id} />
+              )}
+
+              <Link href={`/forms/production/daily-report/${report.id}/edit`} className="inline-flex items-center text-sm font-black uppercase tracking-wider border-2 border-indigo-600 text-indigo-600 px-4 py-2 bg-white hover:bg-indigo-600 hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(79,70,229,1)] hover:shadow-none hover:translate-y-[2px] hover:translate-x-[2px]">
+                Edit Report
+              </Link>
+            </>
+          )}
+          <ExportDailyReportButton report={report} />
+          <PrintButton />
+          <SharePDFButton 
+            elementId="daily-report-print-container" 
+            filename={`Daily Production Report ${report.line.replace(' - ', ' ')} ${report.shift} Date ${new Date(report.date).toLocaleDateString('en-GB').replace(/\//g, '.')}.pdf`}
+          />
+        </div>
+      </div>
+
+      {/* SINGLE MASTER CONTAINER */}
+      <div id="daily-report-print-container" className="print-container w-full max-w-[210mm] bg-white min-h-[297mm] print:min-h-0 print:box-border flex flex-col print:block shadow-[15px_15px_0px_0px_rgba(0,0,0,0.2)] print:shadow-none border-2 print:border-2 border-black print:border-black print:rounded-none print:bg-white print:text-black print:max-w-none mb-8 print:mb-0">
+        
+        {/* TOP CONTENT (Expands to fill space) */}
+        <div className="flex flex-col print:block">
+          
+          {/* Official GMP Header */}
+          <div className="border-b-[4px] print:border-b-2 border-black bg-white print:bg-transparent">
+            <div className="flex flex-col divide-y-[3px] print:divide-y-2 divide-black print:divide-black">
+              {/* Row 1: Company Info & Logo */}
+              <div className="p-4 sm:p-6 print:p-2 flex justify-between items-center">
+                <div>
+                  <h2 className="font-black text-lg print:text-[12pt] tracking-tight uppercase text-black">Bubbles O2 Sdn Bhd</h2>
+                  <p className="text-xs print:text-[10pt] font-bold text-gray-600 print:text-black leading-snug mt-1">
+                    KOMPLEKS AL AMMAR,<br/>
+                    KG KANCHONG,<br/>
+                    71200, RANTAU,<br/>
+                    NEGERI SEMBILAN
+                  </p>
+                </div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.ico" alt="Bubbles O2 Logo" className="w-24 h-24 sm:w-28 sm:h-28 print:w-32 print:h-32 object-contain drop-shadow-sm print:shadow-none" />
+              </div>
+
+              {/* Row 2: Title */}
+              <div className="p-4 sm:p-6 print:p-1 flex flex-col items-center justify-center text-center bg-blue-50/30 print:bg-transparent">
+                <h1 className="text-xl sm:text-2xl print:text-[14pt] font-black uppercase tracking-tighter text-black leading-tight">
+                  Daily Production Report ({report.line})
+                </h1>
+              </div>
+
+              {/* Row 3: GMP Control Info Table */}
+              <div className="flex flex-col text-xs print:text-[10pt] font-bold bg-white print:bg-transparent">
+                <div className="flex border-b-2 border-black print:border-black items-stretch">
+                  <div className="p-2 sm:p-3 print:py-0.5 print:px-2 border-r-2 border-black print:border-black bg-gray-50 print:bg-transparent flex items-center w-1/3 sm:w-1/4">Rec. No</div>
+                  <div className="p-2 sm:p-3 print:py-0.5 print:px-2 font-black text-black flex-1 flex items-center">SGMP/21/DPR1</div>
+                </div>
+                <div className="flex border-b-2 border-black print:border-black items-stretch">
+                  <div className="p-2 sm:p-3 print:py-0.5 print:px-2 border-r-2 border-black print:border-black bg-gray-50 print:bg-transparent flex items-center w-1/3 sm:w-1/4">Issue No</div>
+                  <div className="p-2 sm:p-3 print:py-0.5 print:px-2 font-black text-black flex-1 flex items-center">1/10/22</div>
+                </div>
+                <div className="flex border-b-2 border-black print:border-black items-stretch">
+                  <div className="p-2 sm:p-3 print:py-0.5 print:px-2 border-r-2 border-black print:border-black bg-gray-50 print:bg-transparent flex items-center w-1/3 sm:w-1/4">Rev No</div>
+                  <div className="p-2 sm:p-3 print:py-0.5 print:px-2 font-black text-black flex-1 flex items-center">4</div>
+                </div>
+                <div className="flex items-stretch">
+                  <div className="p-2 sm:p-3 print:py-0.5 print:px-2 border-r-2 border-black print:border-black bg-gray-50 print:bg-transparent flex items-center w-1/3 sm:w-1/4">Effective Date</div>
+                  <div className="p-2 sm:p-3 print:py-0.5 print:px-2 font-black text-black flex-1 flex items-center">01/07/2026</div>
+                </div>
+              </div>
+            </div>
+            
+            {/* System Tag */}
+            <div className="border-t-[3px] print:border-t-2 border-black print:border-black bg-gray-100 print:bg-transparent p-2 print:py-0.5 print:px-2 flex justify-between items-center text-[10px] print:text-[8pt] sm:text-xs font-black uppercase px-4 sm:px-6">
+              <span className="text-gray-500 print:text-black">Generated via Digital Operations</span>
+              <span className="text-gray-700 print:text-black bg-white print:bg-transparent print:border-none border border-gray-300 px-2 py-0.5 print:p-0">System ID: {report.id.split("-")[0]}</span>
+            </div>
+          </div>
+
+          <div className="p-4 sm:p-6 print:p-2 space-y-6 print:space-y-2 flex flex-col flex-1">
+            
+            {/* Section 1: Meta */}
+            <section className="print:break-inside-avoid mb-6 print:mb-2">
+              <h2 className="text-lg print:text-[12pt] font-black uppercase tracking-tight border-b-2 border-black print:border-black pb-1 mb-3 print:mb-1 print:break-after-avoid">1. Shift Information</h2>
+              <div className="grid grid-cols-2 md:grid-cols-6 print:grid-cols-6 gap-3 print:gap-2">
+                <div className="bg-gray-50 print:bg-transparent border border-gray-300 print:border-black p-3 print:py-1 print:px-2">
+                  <p className="text-[10px] print:text-[8pt] font-black uppercase text-gray-500 print:text-black mb-0.5 print:mb-0">Date</p>
+                  <p className="font-bold text-sm print:text-[10pt]">{new Date(report.date).toLocaleDateString('en-GB')}</p>
+                </div>
+                <div className="bg-gray-50 print:bg-transparent border border-gray-300 print:border-black p-3 print:py-1 print:px-2">
+                  <p className="text-[10px] print:text-[8pt] font-black uppercase text-gray-500 print:text-black mb-0.5 print:mb-0">Time</p>
+                  <p className="font-bold text-sm print:text-[10pt]">{report.time || "-"}</p>
+                </div>
+                <div className="bg-gray-50 print:bg-transparent border border-gray-300 print:border-black p-3 print:py-1 print:px-2">
+                  <p className="text-[10px] print:text-[8pt] font-black uppercase text-gray-500 print:text-black mb-0.5 print:mb-0">Shift</p>
+                  <p className="font-black text-sm print:text-[10pt] text-blue-700 print:text-black">{report.shift}</p>
+                </div>
+                <div className="bg-gray-50 print:bg-transparent border border-gray-300 print:border-black p-3 print:py-1 print:px-2">
+                  <p className="text-[10px] print:text-[8pt] font-black uppercase text-gray-500 print:text-black mb-0.5 print:mb-0">Line</p>
+                  <p className="font-bold text-sm print:text-[10pt]">{report.line}</p>
+                </div>
+                <div className="bg-gray-50 print:bg-transparent border border-gray-300 print:border-black p-3 print:py-1 print:px-2">
+                  <p className="text-[10px] print:text-[8pt] font-black uppercase text-gray-500 print:text-black mb-0.5 print:mb-0">Total Manpower</p>
+                  <p className="font-bold text-sm print:text-[10pt]">{report.totalManpower ? `${report.totalManpower} / ${report.maxTotalManpower || 10}` : "-"}</p>
+                </div>
+                <div className="bg-gray-50 print:bg-transparent border border-gray-300 print:border-black p-3 print:py-1 print:px-2">
+                  <p className="text-[10px] print:text-[8pt] font-black uppercase text-gray-500 print:text-black mb-0.5 print:mb-0">Prepared By</p>
+                  <p className="font-bold text-sm print:text-[10pt] uppercase truncate" title={report.preparedBy}>{report.preparedBy}</p>
+                </div>
+              </div>
+            </section>
+
+
+
+            {/* TWO COLUMN WRAPPER FOR PRODUCTION AND REJECTS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 print:grid-cols-2 gap-6 print:gap-2 print:break-inside-avoid">
+              
+              {/* Section 2: Production */}
+              <section className="print:break-inside-avoid">
+                <h2 className="text-lg print:text-[12pt] font-black uppercase tracking-tight border-b-2 border-black print:border-black pb-1 mb-3 print:mb-1 print:break-after-avoid">2. Production Output</h2>
+                <div className="space-y-3 print:space-y-1">
+                {report.noProduction ? (
+                  <div className="p-4 border-2 border-dashed border-gray-400 bg-gray-50 text-center font-bold uppercase text-gray-500 rounded print:border print:bg-transparent print:text-black">
+                    No Production Run For This Shift
+                  </div>
+                ) : report.productions.filter((prod: any) => prod.totalBox > 0).map((prod: any) => (
+                  <div key={prod.id} className="border-2 print:border border-black print:border-black bg-white print:bg-transparent print:break-inside-avoid">
+                    <div className="bg-gray-100 print:bg-transparent border-b-2 print:border-b border-black print:border-black p-3 print:py-0.5 print:px-2 font-black uppercase flex justify-between items-center text-sm print:text-[10pt]">
+                      <span>{prod.productType.replace('p800_', '800ml x ').replace('p425_', '425ml x ')}</span>
+                      <span className="bg-black text-white print:bg-transparent print:text-black print:border-l print:border-black px-3 print:px-1 py-1 print:py-0 text-sm print:text-[10pt]">{prod.totalBox} Box</span>
+                    </div>
+                    <div className="p-0">
+                      <table className="w-full text-sm print:text-[10pt]">
+                        <thead className="bg-gray-50 print:bg-gray-100 print:text-black border-b border-gray-200 print:border-black">
+                          <tr>
+                            <th className="p-2 print:py-0.5 print:px-2 text-left font-bold text-gray-500 print:text-black uppercase text-xs print:text-[9pt]">Batch No</th>
+                            <th className="p-2 print:py-0.5 print:px-2 text-center font-bold text-gray-500 print:text-black uppercase text-xs print:text-[9pt]">Type</th>
+                            <th className="p-2 print:py-0.5 print:px-2 text-right font-bold text-gray-500 print:text-black uppercase text-xs print:text-[9pt]">Qty</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {prod.batches.map((b: any) => (
+                            <tr key={b.id} className="border-b border-gray-100 print:border-black last:border-0 last:print:border-0 font-bold">
+                              <td className="p-2 print:py-0.5 print:px-2 uppercase">{b.batchNo}</td>
+                              <td className="p-2 print:py-0.5 print:px-2 text-center text-blue-600 print:text-black">{b.type === 'Others' ? b.otherType : b.type}</td>
+                              <td className="p-2 print:py-0.5 print:px-2 text-right">{b.qty} Box</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ))}
+                </div>
+              </section>
+
+              {/* Section 3: Rejects */}
+              <section className="print:break-inside-avoid">
+                <h2 className="text-lg print:text-[12pt] font-black uppercase tracking-tight border-b-2 border-black print:border-black pb-1 mb-3 print:mb-1 print:break-after-avoid">3. Reject Logs</h2>
+                <div className="grid grid-cols-1 gap-6">
+                  {/* Table 1: Scrap */}
+                  <div>
+                    <h3 className="font-bold text-xs uppercase mb-1">REJECT</h3>
+                    <table className="w-full border-2 print:border border-black print:border-black text-xs print:text-[10pt]">
+                      <thead className="bg-gray-100 print:bg-gray-100 print:text-black border-b-2 print:border-b border-black print:border-black">
+                        <tr>
+                          <th className="p-2 print:py-0.5 print:px-2 text-left border-r-2 print:border-r border-black print:border-black uppercase font-black">Item</th>
+                          <th className="p-2 print:py-0.5 print:px-2 text-center border-r-2 print:border-r border-black print:border-black uppercase font-black">Before</th>
+                          <th className="p-2 print:py-0.5 print:px-2 text-center border-r-2 print:border-r border-black print:border-black uppercase font-black">After</th>
+                          <th className="p-2 print:py-0.5 print:px-2 text-center bg-gray-200 print:bg-transparent uppercase font-black">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {report.rejects.filter((r: any) => {
+                          if (r.type && r.type !== "SCRAP") return false;
+                          const is800 = (report.line || "").includes("800");
+                          const is425 = (report.line || "").includes("425");
+                          const item = (r.item || "").toUpperCase();
+                          if (is800 && (item.includes("425") || item.includes("P425"))) return false;
+                          if (is425 && (item.includes("800") || item.includes("P800"))) return false;
+                          return true;
+                        }).map((rej: any) => (
+                          <tr key={rej.id} className="border-b-2 print:border-b border-black print:border-black font-bold last:border-0 last:print:border-0">
+                            <td className="p-2 print:py-0.5 print:px-2 border-r-2 print:border-r border-black print:border-black uppercase">{rej.item.startsWith('BOX_P') ? `BOX (${rej.item.replace('BOX_P800_', '800 ML X ').replace('BOX_P425_', '425 ML X ')})` : rej.item}</td>
+                            <td className="p-2 print:py-0.5 print:px-2 text-center border-r-2 print:border-r border-black print:border-black text-gray-600 print:text-black">{rej.before}</td>
+                            <td className="p-2 print:py-0.5 print:px-2 text-center border-r-2 print:border-r border-black print:border-black text-gray-600 print:text-black">{rej.after}</td>
+                            <td className="p-2 print:py-0.5 print:px-2 text-center bg-gray-100 print:bg-transparent text-red-600 print:text-black font-black">{rej.before + rej.after}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </section>
+            </div> {/* END TWO COLUMN WRAPPER */}
+            {/* Section 4: Inventory */}
+            <section>
+              <h2 className="text-lg print:text-[12pt] font-black uppercase tracking-tight border-b-2 border-black print:border-black pb-1 mb-3 print:mb-2 print:break-after-avoid">4. Inventory Summary</h2>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full table-fixed text-xs print:text-[8pt] border-collapse border-2 border-black print:border-black bg-white">
+                  <thead className="bg-gray-100 print:bg-gray-100 font-black uppercase text-left border-b-2 border-black print:border-black leading-tight text-[10px] print:text-[8pt]">
+                    <tr>
+                      <th className="w-[12%] p-1.5 print:p-1 border-r-2 border-black align-top" rowSpan={2}>Material</th>
+                      <th className="w-[18%] p-1.5 print:p-1 border-r-2 border-black align-top" rowSpan={2}>Storeroom Balance</th>
+                      <th className="w-[20%] p-1.5 print:p-1 border-r-2 border-black align-top" rowSpan={2}>Transfer In (DO)</th>
+                      <th className="w-[30%] p-1.5 print:p-1 border-r-2 border-b-2 border-black align-top text-center" colSpan={2}>Usage Log</th>
+                      <th className="w-[20%] p-1.5 print:p-1 align-top" rowSpan={2}>Carry Forward</th>
+                    </tr>
+                    <tr>
+                      <th className="w-[15%] p-1 print:p-0.5 border-r border-black bg-blue-50/50 print:bg-transparent text-center">Before</th>
+                      <th className="w-[15%] p-1 print:p-0.5 border-r-2 border-black bg-blue-50/50 print:bg-transparent text-center">After</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {['BOTTLE', 'LABEL', 'CAP', 'BOX_p800_12', 'BOX_p800_20', 'BOX_p425_24', 'BOX_p425_6'].map(key => {
+                      const is800 = report.line.includes("800");
+                      const is425 = report.line.includes("425");
+                      const allowedBottleMults = is800 ? [225] : is425 ? [181, 162] : [];
+
+                      // labelType only ever means "label type" for the LABEL section. On other
+                      // sections it is either unused or holds an unrelated payload (DO number on
+                      // TransferIn, CAP's JSON stash), so printing it there leaked a bogus
+                      // "(Standard Front)" onto every bottle/cap/box row. The form has always
+                      // gated this on isLabel; the view never did.
+                      const showLabelType = key === 'LABEL';
+                      
+                      // 1. Hide boxes that don't belong to this line
+                      if (key.startsWith('BOX_')) {
+                        if (is800 && !key.includes('800')) return null;
+                        if (is425 && !key.includes('425')) return null;
+                      }
+
+                      const inv = getInventoryForSection(key)
+                      if (inv.length === 0) return null;
+
+                      // 2. Filter out empty default inputs from the form state
+                      const sources = inv.filter((i: any) => i.type === 'Storeroom' && i.batchNo?.trim())
+                      const usages = inv.filter((i: any) => i.type === 'Usage' && i.batchNo?.trim())
+                      
+                      const titleName = key.startsWith('BOX_') 
+                        ? `BOX (${key.replace('BOX_p800_', '800 ML X ').replace('BOX_p425_', '425 ML X ')})` 
+                        : key
+
+                      // Check if report has explicit TransferIn logs (new format)
+                      const hasExplicitTransferIns = report.inventory.some((i: any) => i.type === "TransferIn" || i.type === "TransferInFlag");
+                      const explicitTransferIns = report.inventory.filter((i: any) => i.sectionKey === key && i.type === "TransferIn");
+
+                      // Filter transferIns for this section
+                      const sectionDOItems = hasExplicitTransferIns ? explicitTransferIns.map((i: any) => ({
+                        batchNo: i.batchNo,
+                        mult: i.mult,
+                        bags: i.bags,
+                        doNumber: i.labelType
+                      })) : transferIns.flatMap(ti => ti.items.map(item => ({...item, doNumber: ti.doNumber}))).filter((item: any) => {
+                        if (key === 'BOTTLE') {
+                           if (item.category.includes("BOTTLE")) {
+                             return allowedBottleMults.length === 0 || allowedBottleMults.includes(item.mult);
+                           }
+                           return false;
+                        }
+                        if (key === 'LABEL') {
+                            if (!item.category.includes("LABEL")) return false;
+                            if (is800 && item.category.includes("425")) return false;
+                            if (is425 && item.category.includes("800")) return false;
+                            return true;
+                        }
+                        if (key === 'CAP') {
+                            if (!item.category.includes("CAP")) return false;
+                            if (is800 && item.category.includes("425")) return false;
+                            if (is425 && item.category.includes("800")) return false;
+                            return true;
+                        }
+                        if (key.startsWith('BOX_')) {
+                          const multStr = key.split('_').pop();
+                          return item.category.includes("BOX") && item.category.includes(multStr!);
+                        }
+                        return false;
+                      });
+
+                      // Collect hold batch numbers for tagging
+                      const holdBatchSet = new Set([
+                        ...(report.holds || []).map((h: any) => h.batchNo),
+                        ...report.inventory.filter((i: any) => i.type === 'Hold').map((i: any) => i.batchNo)
+                      ]);
+
+                      const sectionBatchNos = Array.from(new Set([
+                        ...sources.map((s:any)=>`${s.batchNo}|${s.mult}`), 
+                        ...sectionDOItems.map((d:any)=>`${d.batchNo}|${d.mult}`),
+                        ...usages.map((u:any)=>`${u.batchNo}|${u.mult}`)
+                      ]))
+                      
+                      // Which mult groups exist per batch — needed so a batch that exists under
+                      // two mults (e.g. 425ml x181 and x162) doesn't get its usage deducted twice
+                      const multsByBatch: Record<string, Set<number>> = {}
+                      sectionBatchNos.forEach((bk: any) => {
+                        const [bn, m] = bk.split('|')
+                        if (!multsByBatch[bn]) multsByBatch[bn] = new Set()
+                        multsByBatch[bn].add(Number(m))
+                      })
+
+                      const carryForwardSummaries: any[] = []
+                      sectionBatchNos.forEach((batchKey: any) => {
+                        const [batchNo, multStr] = batchKey.split('|');
+                        const multVal = Number(multStr);
+
+                        // Get storeroom balance (carry forward from previous day)
+                        const storeroomObj = sources.find((s:any) => s.batchNo === batchNo && s.mult === multVal)
+                        const storeroomBags = sources
+                          .filter(s => s.batchNo === batchNo && s.mult === multVal)
+                          .reduce((sum, s) => sum + s.bags, 0)
+
+                        // Get today's Transfer In for this batch
+                        const todayDOBags = sectionDOItems
+                          .filter((d:any) => d.batchNo === batchNo && d.mult === multVal)
+                          .reduce((sum:number, d:any) => sum + d.bags, 0)
+
+                        // Total available = Storeroom + Transfer In
+                        const startBags = storeroomBags + todayDOBags
+                        const mult = multVal
+
+                        const matchesThisBatch = (u: any) => {
+                          const pureU = typeof u.batchNo === 'string' ? u.batchNo.split('|')[0] : u.batchNo
+                          if (pureU !== batchNo) return false
+                          const uMult = Number(u.mult) || 1
+                          const groupMults = multsByBatch[batchNo]
+                          // Batch exists under multiple mults: count the usage only in its own mult
+                          // group (legacy rows with an unknown mult still match every group)
+                          if (groupMults && groupMults.size > 1 && groupMults.has(uMult)) return uMult === multVal
+                          return true
+                        }
+
+                        const beforeBags = usages.filter((u:any) => matchesThisBatch(u) && u.period !== 'After')
+                          .reduce((sum:number, u:any) => sum + effectiveUsageBags(u, key), 0)
+
+                        const afterBags = usages.filter((u:any) => matchesThisBatch(u) && u.period === 'After')
+                          .reduce((sum:number, u:any) => sum + effectiveUsageBags(u, key), 0)
+
+                        const usedBags = beforeBags + afterBags
+                        const carryFwdBags = startBags - usedBags
+                        carryForwardSummaries.push({ batchNo, startBags, usedBags, carryFwdBags, mult, labelType: storeroomObj?.labelType, isHold: holdBatchSet.has(batchNo) })
+                      })
+
+                      // Accumulate row totals
+                      const rowTotals = {
+                        storeroom: {} as Record<string, number>,
+                        transferIn: {} as Record<string, number>,
+                        usageBefore: {} as Record<string, number>,
+                        usageAfter: {} as Record<string, number>,
+                        carryForward: {} as Record<string, number>,
+                      };
+                      
+                      // CAP usage rows keep a JSON stash in labelType — group those by mult only
+                      const getGroupKey = (item: any) => (showLabelType && item.labelType && !isJsonLabelType(item.labelType)) ? `${item.mult}|${item.labelType}` : `${item.mult}`;
+
+                      sectionDOItems.forEach((s: any) => { const k = getGroupKey(s); rowTotals.transferIn[k] = (rowTotals.transferIn[k] || 0) + s.bags; });
+                      sources.forEach((s: any) => { const k = getGroupKey(s); rowTotals.storeroom[k] = (rowTotals.storeroom[k] || 0) + s.bags; });
+                      usages.filter((u:any) => u.period === 'Before').forEach((u: any) => { const k = getGroupKey(u); rowTotals.usageBefore[k] = (rowTotals.usageBefore[k] || 0) + effectiveUsageBags(u, key); });
+                      usages.filter((u:any) => u.period === 'After').forEach((u: any) => { const k = getGroupKey(u); rowTotals.usageAfter[k] = (rowTotals.usageAfter[k] || 0) + effectiveUsageBags(u, key); });
+                      carryForwardSummaries.forEach((s: any) => { const k = getGroupKey(s); rowTotals.carryForward[k] = (rowTotals.carryForward[k] || 0) + s.carryFwdBags; });
+
+                      const renderUsageEntry = (u: any) => {
+                        const capMeta = key === 'CAP' ? parseCapMeta(u.labelType) : null
+                        const effBags = fmtBags(effectiveUsageBags(u, key))
+                        return (
+                          <div key={u.id} className="text-[10px] print:text-[8pt] font-bold leading-tight border-b border-dashed border-gray-200 print:border-gray-300 pb-1 last:border-0 last:pb-0 break-inside-avoid">
+                            <div>{u.batchNo} {showLabelType && u.labelType && !isJsonLabelType(u.labelType) ? `(${u.labelType})` : ''}</div>
+                            <div className="text-blue-700 print:text-black">{effBags} <span className="text-[8px] print:text-[6pt] text-gray-500">(x{u.mult})</span></div>
+                            {capMeta && (capMeta.boxes > 0 || capMeta.weight > 0) && (
+                              <div className="text-[8px] print:text-[6pt] text-gray-500">
+                                {capMeta.boxes > 0 ? `${capMeta.boxes} Box` : ''}{capMeta.boxes > 0 && capMeta.weight > 0 ? ' / ' : ''}{capMeta.weight > 0 ? `${capMeta.weight} kg` : ''} = {capPcsFromInput(capMeta.weight, capMeta.boxes)} Pcs
+                              </div>
+                            )}
+                          </div>
+                        )
+                      }
+
+                      return (
+                        <React.Fragment key={key}>
+                        <tr className="border-b border-black print:border-black print:break-inside-avoid">
+                          {/* 1. Material */}
+                          <td className="p-2 print:p-1 border-r-2 border-black bg-emerald-50 print:bg-transparent font-black uppercase text-emerald-900 print:text-black align-top break-words text-[10px] print:text-[8pt]">
+                            {titleName}
+                          </td>
+                          
+                          {/* 2. Storeroom Balance */}
+                          <td className="p-2 print:p-1 border-r-2 border-black align-top break-words">
+                            {sources.length === 0 ? <span className="text-gray-400 italic font-normal text-[10px] print:text-[8pt]">Nil</span> : (
+                              <div className="space-y-1.5">
+                                {sources.map((s: any) => (
+                                  <div key={s.id} className="text-[10px] print:text-[8pt] font-bold leading-tight border-b border-dashed border-gray-200 print:border-gray-300 pb-1 last:border-0 last:pb-0 break-inside-avoid">
+                                    <div>{s.batchNo} {holdBatchSet.has(s.batchNo) ? <span className="text-amber-600 print:text-black font-black">(HOLD)</span> : ''} {showLabelType && s.labelType ? `(${s.labelType})` : ''}</div>
+                                    <div>{s.bags} <span className="text-[8px] print:text-[6pt] text-gray-500">(x{s.mult})</span></div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 3. Transfer In */}
+                          <td className="p-2 print:p-1 border-r-2 border-black align-top break-words">
+                            {sectionDOItems.length === 0 ? <span className="text-gray-400 italic font-normal text-[10px] print:text-[8pt]">Nil</span> : (
+                              <div className="space-y-1.5">
+                                {sectionDOItems.map((s: any) => (
+                                  <div key={s.id} className="text-[10px] print:text-[8pt] font-bold leading-tight border-b border-dashed border-gray-200 print:border-gray-300 pb-1 last:border-0 last:pb-0 break-inside-avoid">
+                                    <div className="text-[8px] print:text-[6pt] text-gray-500 uppercase">{s.doNumber}</div>
+                                    <div>{s.batchNo} {holdBatchSet.has(s.batchNo) ? <span className="text-amber-600 print:text-black font-black">(HOLD)</span> : ''}</div>
+                                    <div className="text-emerald-700 print:text-black">{s.bags} <span className="text-[8px] print:text-[6pt] text-gray-500">(x{s.mult})</span></div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 4. Usage Before */}
+                          <td className="p-2 print:p-1 border-r border-black align-top break-words">
+                            <div className="space-y-1.5">
+                              {usages.filter((u:any) => u.period === 'Before').map(renderUsageEntry)}
+                            </div>
+                          </td>
+
+                          {/* 5. Usage After */}
+                          <td className="p-2 print:p-1 border-r-2 border-black align-top break-words">
+                            <div className="space-y-1.5">
+                              {usages.filter((u:any) => u.period === 'After').map(renderUsageEntry)}
+                            </div>
+                          </td>
+
+                          {/* 6. Carry Forward */}
+                          <td className="p-2 print:p-1 border-black align-top break-words bg-yellow-50/30 print:bg-transparent">
+                            {carryForwardSummaries.length === 0 ? <span className="text-gray-400 italic font-normal text-[10px] print:text-[8pt]">Nil</span> : (
+                              <div className="space-y-1.5">
+                                {carryForwardSummaries.map((summary: any) => (
+                                  <div key={`${summary.batchNo}|${summary.mult}`} className="text-[10px] print:text-[8pt] font-bold leading-tight border-b border-dashed border-yellow-200 print:border-gray-300 pb-1 last:border-0 last:pb-0 break-inside-avoid">
+                                    <div className="uppercase mb-0.5">{summary.batchNo} {summary.isHold ? <span className="text-amber-600 print:text-black font-black">(HOLD)</span> : ''} {showLabelType && summary.labelType ? `(${summary.labelType})` : ''}</div>
+                                    <div className="whitespace-nowrap bg-yellow-100 print:bg-transparent px-1 print:px-0 py-0.5 rounded text-[9px] print:text-[7pt] text-gray-800">
+                                      Av: {fmtBags(summary.startBags)} - {fmtBags(summary.usedBags)} = <span className="font-black text-[10px] print:text-[8pt] text-black">{fmtBags(summary.carryFwdBags)}</span> <span className="text-[8px] print:text-[6pt] text-gray-600">(x{summary.mult})</span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                          <tr className="border-b-2 border-black print:border-black bg-gray-100 print:bg-transparent font-black text-[10px] print:text-[8pt]">
+                            <td className="p-2 print:p-1 border-r-2 border-black">{key === 'BOTTLE' ? 'TOTAL BAG' : key === 'LABEL' ? 'QUANTITY (ROLL)' : 'QUANTITY (PCS)'}</td>
+                            <td className="p-2 print:p-1 border-r-2 border-black align-top">
+                              {Object.entries(rowTotals.storeroom).map(([keyStr, bags]) => {
+                                const [mult, labelType] = keyStr.split('|');
+                                return (
+                                <div key={keyStr} className="mb-1 last:mb-0">
+                                  <div className="text-blue-700 print:text-black">{bags} <span className="text-gray-600 print:text-black text-[8px] print:text-[6pt]">(x{mult})</span> {labelType && <span className="text-gray-800 print:text-black text-[9px] print:text-[7pt]">({labelType})</span>}</div>
+                                  {key === 'CAP' && <div className="text-[9px] print:text-[7pt] text-gray-500 font-bold mt-0.5">= {bags * Number(mult)} Pcs</div>}
+                                </div>
+                              )})}
+                            </td>
+                            <td className="p-2 print:p-1 border-r-2 border-black align-top">
+                              {Object.entries(rowTotals.transferIn).map(([keyStr, bags]) => {
+                                const [mult, labelType] = keyStr.split('|');
+                                return (
+                                <div key={keyStr} className="mb-1 last:mb-0">
+                                  <div className="text-emerald-700 print:text-black">{bags} <span className="text-gray-600 print:text-black text-[8px] print:text-[6pt]">(x{mult})</span> {labelType && <span className="text-gray-800 print:text-black text-[9px] print:text-[7pt]">({labelType})</span>}</div>
+                                  {key === 'CAP' && <div className="text-[9px] print:text-[7pt] text-gray-500 font-bold mt-0.5">= {bags * Number(mult)} Pcs</div>}
+                                </div>
+                              )})}
+                            </td>
+                            <td className="p-2 print:p-1 border-r border-black align-top">
+                              {Object.entries(rowTotals.usageBefore).map(([keyStr, bags]) => {
+                                const [mult, labelType] = keyStr.split('|');
+                                return (
+                                <div key={keyStr} className="mb-1 last:mb-0">
+                                  <div className="text-blue-700 print:text-black">{fmtBags(Number(bags))} <span className="text-gray-600 print:text-black text-[8px] print:text-[6pt]">(x{mult})</span> {labelType && <span className="text-gray-800 print:text-black text-[9px] print:text-[7pt]">({labelType})</span>}</div>
+                                  {key === 'CAP' && <div className="text-[9px] print:text-[7pt] text-gray-500 font-bold mt-0.5">= {Math.round(Number(bags) * Number(mult))} Pcs</div>}
+                                </div>
+                              )})}
+                            </td>
+                            <td className="p-2 print:p-1 border-r-2 border-black align-top">
+                              {Object.entries(rowTotals.usageAfter).map(([keyStr, bags]) => {
+                                const [mult, labelType] = keyStr.split('|');
+                                return (
+                                <div key={keyStr} className="mb-1 last:mb-0">
+                                  <div className="text-blue-700 print:text-black">{fmtBags(Number(bags))} <span className="text-gray-600 print:text-black text-[8px] print:text-[6pt]">(x{mult})</span> {labelType && <span className="text-gray-800 print:text-black text-[9px] print:text-[7pt]">({labelType})</span>}</div>
+                                  {key === 'CAP' && <div className="text-[9px] print:text-[7pt] text-gray-500 font-bold mt-0.5">= {Math.round(Number(bags) * Number(mult))} Pcs</div>}
+                                </div>
+                              )})}
+                            </td>
+                            <td className="p-2 print:p-1 border-black align-top bg-yellow-100 print:bg-transparent">
+                              {Object.entries(rowTotals.carryForward).map(([keyStr, bags]) => {
+                                const [mult, labelType] = keyStr.split('|');
+                                return (
+                                <div key={keyStr} className="mb-1 last:mb-0">
+                                  <div>{fmtBags(Number(bags))} <span className="text-gray-600 print:text-black text-[8px] print:text-[6pt]">(x{mult})</span> {labelType && <span className="text-gray-800 print:text-black text-[9px] print:text-[7pt]">({labelType})</span>}</div>
+                                  {key === 'CAP' && <div className="text-[9px] print:text-[7pt] text-gray-500 font-bold mt-0.5">= {Math.round(Number(bags) * Number(mult))} Pcs</div>}
+                                </div>
+                              )})}
+                            </td>
+                          </tr>
+                        </React.Fragment>
+                      )
+                    })}
+
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Dedicated On Hold / Quarantine Table */}
+              {((report.holds && report.holds.length > 0) || report.inventory.some((i: any) => i.type === 'Hold')) && (
+                <div className="mt-3 print:mt-2 border-2 border-amber-600 print:border-black p-2.5 print:p-1.5 bg-amber-50/50 print:bg-transparent print:break-inside-avoid">
+                  <h3 className="font-black text-xs print:text-[9pt] uppercase text-amber-900 print:text-black mb-1 flex items-center">
+                    <span className="bg-amber-600 text-white print:bg-black print:text-white px-1.5 py-0.5 mr-1.5 text-[9px] print:text-[7pt] font-black">HOLD</span>
+                    Quarantine / Items On Hold
+                  </h3>
+                  <table className="w-full text-xs print:text-[8pt] border border-black print:border-black bg-white print:bg-transparent">
+                    <thead className="bg-amber-100 print:bg-gray-100 font-black uppercase text-left border-b border-black text-[9px] print:text-[8pt]">
+                      <tr>
+                        <th className="p-1 print:py-0.5 print:px-1 border-r border-black">Material / Section</th>
+                        <th className="p-1 print:py-0.5 print:px-1 border-r border-black">Batch No</th>
+                        <th className="p-1 print:py-0.5 print:px-1 border-r border-black text-center">Hold Qty</th>
+                        <th className="p-1 print:py-0.5 print:px-1">Reason / Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.holds && report.holds.length > 0 ? (
+                        report.holds.map((h: any) => (
+                          <tr key={h.id} className="border-b border-black last:border-0 font-bold">
+                            <td className="p-1 print:py-0.5 print:px-1 border-r border-black uppercase">{h.sectionKey}</td>
+                            <td className="p-1 print:py-0.5 print:px-1 border-r border-black uppercase font-black text-amber-900 print:text-black">{h.batchNo} <span className="text-amber-600 print:text-black">(HOLD)</span></td>
+                            <td className="p-1 print:py-0.5 print:px-1 text-center border-r border-black">{h.qty} {h.sectionKey === 'CAP' ? 'Box' : 'Bag'} <span className="text-[9px] print:text-[7pt] text-gray-500 print:text-black">(x{h.mult} = {h.qty * h.mult} Pcs)</span></td>
+                            <td className="p-1 print:py-0.5 print:px-1 text-gray-700 print:text-black italic">{h.reason || "-"}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        report.inventory.filter((i: any) => i.type === 'Hold').map((h: any) => (
+                          <tr key={h.id} className="border-b border-black last:border-0 font-bold">
+                            <td className="p-1 print:py-0.5 print:px-1 border-r border-black uppercase">{h.sectionKey}</td>
+                            <td className="p-1 print:py-0.5 print:px-1 border-r border-black uppercase font-black text-amber-900 print:text-black">{h.batchNo} <span className="text-amber-600 print:text-black">(HOLD)</span></td>
+                            <td className="p-1 print:py-0.5 print:px-1 text-center border-r border-black">{h.bags} {h.sectionKey === 'CAP' ? 'Box' : 'Bag'} <span className="text-[9px] print:text-[7pt] text-gray-500 print:text-black">(x{h.mult} = {h.bags * h.mult} Pcs)</span></td>
+                            <td className="p-1 print:py-0.5 print:px-1 text-gray-700 print:text-black italic">-</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+            {/* Section 5: Remarks / Downtime */}
+            <section className="print:break-inside-avoid mb-4 print:mb-0">
+              <h2 className="text-lg print:text-[11pt] font-black uppercase tracking-tight border-b-2 border-black print:border-black pb-1 mb-3 print:mb-1 print:break-after-avoid">5. Remarks / Downtime</h2>
+              
+              {/* Breakdown Table */}
+              {report.breakdowns && report.breakdowns.length > 0 && (
+                <div className="mb-3 print:mb-2">
+                  <table className="w-full text-xs print:text-[9pt] border-2 border-black print:border-black">
+                    <thead className="bg-gray-100 print:bg-gray-100 border-b-2 border-black print:border-black">
+                      <tr>
+                        <th className="p-2 print:py-1 print:px-2 text-left border-r-2 border-black uppercase font-black w-1/4">Section</th>
+                        <th className="p-2 print:py-1 print:px-2 text-center border-r-2 border-black uppercase font-black w-1/4">Downtime (Mins)</th>
+                        <th className="p-2 print:py-1 print:px-2 text-left uppercase font-black w-1/2">Reason / Remark</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.breakdowns.map((b: any) => (
+                        <tr key={b.id} className="border-b-2 border-black print:border-black last:border-0 font-bold">
+                          <td className="p-2 print:py-1 print:px-2 border-r-2 border-black uppercase">{b.section}</td>
+                          <td className="p-2 print:py-1 print:px-2 text-center border-r-2 border-black text-red-600 print:text-black">{b.downtime}</td>
+                          <td className="p-2 print:py-1 print:px-2 uppercase text-gray-700 print:text-black">{b.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* General Remarks Box */}
+              <h3 className="font-black text-[10px] print:text-[8pt] uppercase text-gray-500 mb-1">General Remarks</h3>
+              <div className="bg-yellow-50 print:bg-white border-2 print:border border-yellow-200 print:border-black p-3 print:p-1.5 min-h-[40px] print:min-h-[30px] text-xs print:text-[9pt]">
+                {report.remarks ? (
+                  <p className="font-bold text-yellow-900 print:text-black whitespace-pre-wrap leading-tight">{report.remarks}</p>
+                ) : (
+                  <p className="font-bold italic text-yellow-600/50 print:text-gray-400 print:text-black">No general remarks provided.</p>
+                )}
+              </div>
+            </section>
+
+          </div>
+        </div>
+
+        {/* BOTTOM SIGNATURE (Follows content naturally) */}
+        <div className="print:break-inside-avoid px-4 sm:px-6 print:px-4 pb-8 print:pb-2 mt-8 print:mt-3">
+          <div className="grid grid-cols-2 gap-12 sm:gap-24 print:gap-8">
+            {/* Prepared By Box */}
+            <div className="text-center flex flex-col items-center">
+              <div className="h-24 print:h-12 w-full flex items-end justify-center border-b-2 border-black print:border-black border-dashed mb-3 print:mb-1 relative">
+                {report.preparedSignature ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={report.preparedSignature} alt="Prepared Signature" className="max-h-24 print:max-h-12 max-w-full object-contain mb-1 print:mb-0" />
+                ) : (
+                  <span className="absolute bottom-1 print:bottom-0 left-0 right-0 text-gray-300 print:text-black italic text-sm print:text-[8pt]">(Signature)</span>
+                )}
+              </div>
+              <h4 className="font-black uppercase tracking-widest text-lg print:text-[9pt] whitespace-nowrap leading-tight">{report.preparedBy}</h4>
+              <p className="text-xs print:text-[7pt] font-bold uppercase tracking-wider text-gray-500 print:text-black">PREPARED BY</p>
+            </div>
+
+            {/* Verified By Box */}
+            <div className="text-center flex flex-col items-center">
+              <div className="h-24 print:h-12 w-full flex items-end justify-center border-b-2 border-black print:border-black border-dashed mb-3 print:mb-1 relative">
+                {report.verifiedSignature ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={report.verifiedSignature} alt="Verified Signature" className="max-h-24 print:max-h-12 max-w-full object-contain mb-1 print:mb-0" />
+                ) : (
+                  <span className="absolute bottom-1 print:bottom-0 left-0 right-0 text-gray-300 print:text-black italic text-sm print:text-[8pt]">(Signature)</span>
+                )}
+              </div>
+              <h4 className="font-black uppercase tracking-widest text-lg print:text-[9pt] whitespace-nowrap leading-tight">{report.verifiedBy || "_____________________"}</h4>
+              <p className="text-xs print:text-[7pt] font-bold uppercase tracking-wider text-gray-500 print:text-black">VERIFIED BY</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
