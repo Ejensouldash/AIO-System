@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma"
 import { CustomerMasterImport } from "@/components/sales-ordering/CustomerMasterImport"
 import { SalesOrderingPagination } from "@/components/sales-ordering/Pagination"
 import { CustomerPageTabs } from "@/components/sales-ordering/CustomerPageTabs"
+import { CustomerPricingButton } from "@/components/sales-ordering/CustomerPricingButton"
+import { SkuPricingSection } from "@/components/sales-ordering/SkuPricingSection"
+import { getMasterPricesAction } from "@/app/actions/pricing"
 import { canAccessSalesOrderingTab, canManageSalesOrderingCustomers, firstSalesOrderingPath, getSalesOrderingAccess } from "@/lib/sales-ordering/access"
 import { redirect } from "next/navigation"
 
@@ -19,11 +22,14 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
   const page = Number.isFinite(parsedPage) && parsedPage > 0 ? Math.floor(parsedPage) : 1
   const where = q ? { OR: [{ customerCode: { contains: q, mode: "insensitive" as const } }, { legalName: { contains: q, mode: "insensitive" as const } }, { sageCustomerId: { contains: q, mode: "insensitive" as const } }] } : undefined
   
-  const [total, customers, rawRegistrations] = await Promise.all([
+  const [total, customers, rawRegistrations, masterPrices, allCustomersForPricing] = await Promise.all([
     prisma.customer.count({ where }),
     prisma.customer.findMany({
       where,
-      include: { addresses: { take: 1, orderBy: { isDefaultBilling: "desc" } } },
+      include: {
+        addresses: { take: 1, orderBy: { isDefaultBilling: "desc" } },
+        skuPrices: true,
+      },
       orderBy: { legalName: "asc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE
@@ -36,7 +42,19 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
           select: { id: true, customerCode: true, legalName: true }
         }
       }
-    })
+    }),
+    getMasterPricesAction(),
+    prisma.customer.findMany({
+      select: {
+        id: true,
+        customerCode: true,
+        legalName: true,
+        tradingName: true,
+        skuPrices: true,
+      },
+      orderBy: { legalName: "asc" },
+      take: 500,
+    }),
   ])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -49,6 +67,20 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     updatedAt: r.updatedAt.toISOString(),
     reviewedAt: r.reviewedAt ? r.reviewedAt.toISOString() : null,
   }))
+
+  const pricingCustomers = allCustomersForPricing.map(c => {
+    const customPrices: Record<string, number> = {}
+    for (const sp of c.skuPrices) {
+      customPrices[sp.sku] = Number(sp.unitPrice)
+    }
+    return {
+      id: c.id,
+      customerCode: c.customerCode,
+      legalName: c.legalName,
+      tradingName: c.tradingName,
+      customPrices,
+    }
+  })
 
   const customersContent = (
     <div className="space-y-6">
@@ -73,6 +105,7 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                 <th className="px-5 py-3">Classification</th>
                 <th className="px-5 py-3">Terms</th>
                 <th className="px-5 py-3">Address</th>
+                <th className="px-5 py-3 text-center">SKU Pricing</th>
                 <th className="px-5 py-3">Status</th>
               </tr>
             </thead>
@@ -90,6 +123,13 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
                   </td>
                   <td className="px-5 py-4 font-semibold text-slate-700">{customer.creditTermsRaw || "-"}</td>
                   <td className="max-w-sm px-5 py-4 text-xs leading-5 text-slate-500">{customer.addresses[0]?.fullAddress || "No address"}</td>
+                  <td className="px-5 py-4 text-center">
+                    <CustomerPricingButton
+                      customerId={customer.id}
+                      customerName={customer.legalName}
+                      customCount={customer.skuPrices.length}
+                    />
+                  </td>
                   <td className="px-5 py-4">
                     <span className={`rounded-full px-3 py-1 text-xs font-black ${customer.importStatus === "READY" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
                       {customer.importStatus}
@@ -106,10 +146,18 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     </div>
   )
 
+  const pricingContent = (
+    <SkuPricingSection
+      masterPrices={masterPrices}
+      customers={pricingCustomers}
+    />
+  )
+
   return (
     <CustomerPageTabs
       customersContent={customersContent}
       registrations={registrations}
+      pricingContent={pricingContent}
     />
   )
 }

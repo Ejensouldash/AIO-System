@@ -53,15 +53,21 @@ export async function receiveProductionTransfer(transferId: string, receivedById
   }
 }
 
+import { resolveSkuPrice } from "@/lib/pricing/skuPricing"
+
 export type DOLineItemData = {
   sku: string
   batchNumber: string
   qtySent: number
+  unitPrice?: number | null
+  lineTotal?: number | null
 }
 
 export type DOData = {
   distributionDate: string
   destination: string
+  customerId?: string | null
+  totalAmount?: number | null
   distributionMethod: string
   sponsorshipDetails?: string | null
   vehicleNo?: string | null
@@ -80,12 +86,39 @@ export async function createDistributionOrder(data: DOData) {
       })
       const doNumber = `DO-${dateStr}-${(count + 1).toString().padStart(4, "0")}`
 
+      // Resolve pricing for each line item
+      let calculatedDoTotal = 0
+      const processedItems = await Promise.all(
+        data.items.map(async (item) => {
+          let price = item.unitPrice
+          if (price === undefined || price === null) {
+            const resolved = await resolveSkuPrice(data.customerId, item.sku)
+            price = resolved.unitPrice
+          }
+          const lineTotal = item.lineTotal !== undefined && item.lineTotal !== null
+            ? item.lineTotal
+            : Math.round(item.qtySent * price * 100) / 100
+          calculatedDoTotal += lineTotal
+          return {
+            sku: item.sku,
+            batchNumber: item.batchNumber,
+            qtySent: item.qtySent,
+            unitPrice: price,
+            lineTotal,
+          }
+        })
+      )
+
       // 1. Create DistributionOrder
       const distOrder = await tx.distributionOrder.create({
         data: {
           doNumber,
           distributionDate: new Date(data.distributionDate),
           destination: data.destination,
+          customerId: data.customerId || null,
+          totalAmount: data.totalAmount !== undefined && data.totalAmount !== null
+            ? data.totalAmount
+            : Math.round(calculatedDoTotal * 100) / 100,
           distributionMethod: data.distributionMethod,
           sponsorshipDetails: data.sponsorshipDetails || null,
           vehicleNo: data.vehicleNo || null,
@@ -93,10 +126,12 @@ export async function createDistributionOrder(data: DOData) {
           createdById: data.createdById,
           status: "SHIPPED", // Immediately shipped out based on requirements
           items: {
-            create: data.items.map(item => ({
+            create: processedItems.map(item => ({
               sku: item.sku,
               batchNumber: item.batchNumber,
-              qtySent: item.qtySent
+              qtySent: item.qtySent,
+              unitPrice: item.unitPrice,
+              lineTotal: item.lineTotal,
             }))
           }
         }

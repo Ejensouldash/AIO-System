@@ -8,6 +8,8 @@ type PODItem = {
   batchNumber?: string | null
   batchNo?: string | null
   qtySent: number
+  unitPrice?: number | null
+  lineTotal?: number | null
 }
 
 type PODOrder = {
@@ -16,6 +18,9 @@ type PODOrder = {
   distributionDate: string
   destination: string
   distributionMethod: string
+  customerId?: string | null
+  customer?: { id: string; customerCode: string; legalName: string } | null
+  totalAmount?: number | null
   sponsorshipDetails?: string | null
   vehicleNo?: string | null
   driverName?: string | null
@@ -32,6 +37,7 @@ type PODOrder = {
 
 export default function PrintPODPage({ params }: { params: Promise<{ id: string }> }) {
   const [doOrder, setDoOrder] = useState<PODOrder | "not_found" | null>(null)
+  const [showPricing, setShowPricing] = useState(true)
   const origin = useSyncExternalStore(
     () => () => undefined,
     () => (typeof window !== "undefined" ? window.location.origin : ""),
@@ -61,14 +67,16 @@ export default function PrintPODPage({ params }: { params: Promise<{ id: string 
   )
 
   // Aggregate items by SKU and Batch
-  const aggregatedItems: Record<string, { qty: number, sku: string, batchNo: string }> = {}
+  const aggregatedItems: Record<string, { qty: number, sku: string, batchNo: string, unitPrice: number, lineTotal: number }> = {}
   doOrder.items.forEach((item) => {
     const batch = item.batchNumber || item.batchNo || 'N/A'
     const key = `${item.sku}_${batch}`
+    const price = item.unitPrice ?? 0
     if (!aggregatedItems[key]) {
-      aggregatedItems[key] = { qty: 0, sku: item.sku, batchNo: batch }
+      aggregatedItems[key] = { qty: 0, sku: item.sku, batchNo: batch, unitPrice: price, lineTotal: 0 }
     }
     aggregatedItems[key].qty += item.qtySent
+    aggregatedItems[key].lineTotal = Math.round(aggregatedItems[key].qty * price * 100) / 100
   })
 
   const labels: Record<string, string> = {
@@ -79,6 +87,7 @@ export default function PrintPODPage({ params }: { params: Promise<{ id: string 
   }
 
   const totalBoxes = Object.values(aggregatedItems).reduce((a, item) => a + item.qty, 0)
+  const totalAmount = Object.values(aggregatedItems).reduce((a, item) => a + item.lineTotal, 0)
   const linkedGatePass = doOrder.gatePassLinks?.[0]?.gatePass
   const gatePassCode = linkedGatePass?.verificationTokens?.[0]?.publicCode
   const dateStr = new Date(doOrder.distributionDate).toLocaleDateString('en-GB', {
@@ -437,6 +446,29 @@ export default function PrintPODPage({ params }: { params: Promise<{ id: string 
             >
               ← Back
             </button>
+            <label
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                background: '#ffffff',
+                border: '1px solid #003366',
+                color: '#003366',
+                fontWeight: 700,
+                padding: '7px 14px',
+                borderRadius: 4,
+                cursor: 'pointer',
+                fontSize: 12,
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={showPricing}
+                onChange={e => setShowPricing(e.target.checked)}
+                style={{ cursor: 'pointer', accentColor: '#003366' }}
+              />
+              💰 Show Pricing / Delivery Value
+            </label>
             <button
               onClick={() => window.print()}
               style={{
@@ -598,14 +630,20 @@ export default function PrintPODPage({ params }: { params: Promise<{ id: string 
               </div>
             </div>
 
-            {/* Items Table with clean 4-columns (No, Description, Batch Number, Quantity) */}
+            {/* Items Table with dynamic pricing columns */}
             <table className="items-table">
               <thead>
                 <tr>
                   <th style={{ width: 40, textAlign: 'center' }}>No.</th>
                   <th>Item Description</th>
                   <th style={{ width: 140, textAlign: 'center' }}>Batch Number</th>
-                  <th style={{ width: 120, textAlign: 'center' }}>Quantity (Box)</th>
+                  <th style={{ width: 110, textAlign: 'center' }}>Quantity (Box)</th>
+                  {showPricing && (
+                    <>
+                      <th style={{ width: 110, textAlign: 'right' }}>Price (RM)</th>
+                      <th style={{ width: 120, textAlign: 'right' }}>Total (RM)</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -626,11 +664,21 @@ export default function PrintPODPage({ params }: { params: Promise<{ id: string 
                       </span>
                     </td>
                     <td className="qty-col">{item.qty}</td>
+                    {showPricing && (
+                      <>
+                        <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 600, color: '#4a6080' }}>
+                          RM {item.unitPrice.toFixed(2)}
+                        </td>
+                        <td style={{ textAlign: 'right', fontFamily: 'monospace', fontWeight: 800, color: '#003366' }}>
+                          RM {item.lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
                 {Object.entries(aggregatedItems).length === 0 && (
                   <tr>
-                    <td colSpan={4} style={{ textAlign: 'center', padding: 20, color: '#9aaabb', fontStyle: 'italic', fontSize: 11 }}>
+                    <td colSpan={showPricing ? 6 : 4} style={{ textAlign: 'center', padding: 20, color: '#9aaabb', fontStyle: 'italic', fontSize: 11 }}>
                       No items recorded.
                     </td>
                   </tr>
@@ -638,8 +686,13 @@ export default function PrintPODPage({ params }: { params: Promise<{ id: string 
               </tbody>
               <tfoot>
                 <tr>
-                  <td colSpan={3} style={{ textAlign: 'right', paddingRight: 20 }}>Total Quantity</td>
-                  <td className="total-qty">{totalBoxes}</td>
+                  <td colSpan={3} style={{ textAlign: 'right', paddingRight: 20, fontWeight: 700 }}>Total</td>
+                  <td className="total-qty">{totalBoxes} Box</td>
+                  {showPricing && (
+                    <td colSpan={2} style={{ textAlign: 'right', paddingRight: 12, fontWeight: 900, color: '#003366', fontFamily: 'monospace', fontSize: 13 }}>
+                      RM {totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  )}
                 </tr>
               </tfoot>
             </table>

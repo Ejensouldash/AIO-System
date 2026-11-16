@@ -3,16 +3,33 @@ export const dynamic = "force-dynamic"
 import { auth } from "@/auth"
 import { redirect } from "next/navigation"
 import { getAvailableInventory } from "@/app/actions/warehouse"
+import { getAllActiveProducts } from "@/lib/pricing/skuPricing"
 import { CreateDOForm } from "./CreateDOForm"
 import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
+import { prisma } from "@/lib/prisma"
 
 export default async function NewDistributionOrderPage() {
   const session = await auth()
   if (!session) redirect("/login")
   const user = session.user as any
 
-  const availableInventory = await getAvailableInventory()
+  const [availableInventory, rawCustomers, products] = await Promise.all([
+    getAvailableInventory(),
+    prisma.customer.findMany({
+      select: { id: true, customerCode: true, legalName: true, tradingName: true },
+      orderBy: { legalName: "asc" },
+      take: 200,
+    }),
+    getAllActiveProducts(),
+  ])
+
+  const customers = rawCustomers.map(c => ({
+    id: c.id,
+    customerCode: c.customerCode,
+    legalName: c.legalName,
+    tradingName: c.tradingName || "",
+  }))
 
   return (
     <div className="max-w-4xl">
@@ -27,7 +44,7 @@ export default async function NewDistributionOrderPage() {
         
         <h2 className="text-xl sm:text-3xl font-black uppercase tracking-tight mb-6 sm:mb-8 pr-16 sm:pr-0">Create Distribution Order</h2>
         
-        <CreateDOForm availableInventory={availableInventory} userId={user.id} />
+        <CreateDOForm availableInventory={availableInventory} userId={user.id} customers={customers} products={products} />
       </div>
     </div>
   )

@@ -124,10 +124,10 @@ model User {
   createdHandovers  ProductionHandover[] @relation("HandoverCreator")
   receivedHandovers ProductionHandover[] @relation("HandoverReceiver")
 
-  branch                 Branch?                 @relation(fields: [branchId], references: [id])
-  unit                   Unit?                   @relation(fields: [unitId], references: [id])
-  openingStocks          WarehouseOpeningStock[] @relation("OpeningStockSetter")
-  auditLogs              AuditLog[]
+  branch        Branch?                 @relation(fields: [branchId], references: [id])
+  unit          Unit?                   @relation(fields: [unitId], references: [id])
+  openingStocks WarehouseOpeningStock[] @relation("OpeningStockSetter")
+  auditLogs     AuditLog[]
 
   // Gatepass & Pallet relations
   gatePassesCreated       WarehouseGatePass[]     @relation("WarehouseGatePassCreator")
@@ -141,9 +141,9 @@ model User {
   physicalPalletEvents    PhysicalPalletEvent[]
 
   // Sales Ordering relations
-  uploadedSalesDocs      SalesDocumentIntake[]   @relation("SalesDocumentUploader")
-  reviewedSalesDocs      SalesDocumentIntake[]   @relation("SalesDocumentReviewer")
-  createdSalesOrders     SalesOrder[]            @relation("SalesOrderCreator")
+  uploadedSalesDocs  SalesDocumentIntake[] @relation("SalesDocumentUploader")
+  reviewedSalesDocs  SalesDocumentIntake[] @relation("SalesDocumentReviewer")
+  createdSalesOrders SalesOrder[]          @relation("SalesOrderCreator")
 }
 
 model Branch {
@@ -157,12 +157,12 @@ model Branch {
 }
 
 model Unit {
-  id        String     @id @default(uuid())
+  id        String   @id @default(uuid())
   name      String
   branchId  String
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  branch    Branch     @relation(fields: [branchId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  branch    Branch   @relation(fields: [branchId], references: [id])
   users     User[]
 }
 
@@ -386,25 +386,28 @@ model InventoryBatch {
 }
 
 model DistributionOrder {
-  id                 String                      @id @default(uuid())
-  doNumber           String                      @unique
-  distributionDate   DateTime
-  destination        String
-  vehicleNo          String?
-  driverName         String?
-  status             DOStatus                    @default(PREPARING)
-  createdById        String
-  createdAt          DateTime                    @default(now())
-  updatedAt          DateTime                    @updatedAt
-  sponsorshipDetails String?
-  distributionMethod String
-  items              DOLineItem[]
-  createdBy          User                        @relation("DOCreator", fields: [createdById], references: [id])
-  returns            GoodsReturnNote[]
-  trackingEvents     DistributionTrackingEvent[]
-  gatePassLinks      GatePassDeliveryOrder[]
-  palletTransfers    PalletTransfer[]
-  physicalPallets    PhysicalPallet[]            @relation("CurrentPalletDO")
+  id                   String                      @id @default(uuid())
+  doNumber             String                      @unique
+  distributionDate     DateTime
+  destination          String
+  vehicleNo            String?
+  driverName           String?
+  status               DOStatus                    @default(PREPARING)
+  createdById          String
+  createdAt            DateTime                    @default(now())
+  updatedAt            DateTime                    @updatedAt
+  sponsorshipDetails   String?
+  distributionMethod   String
+  customerId           String?
+  totalAmount          Decimal?                    @db.Decimal(14, 2)
+  items                DOLineItem[]
+  createdBy            User                        @relation("DOCreator", fields: [createdById], references: [id])
+  customer             Customer?                   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  returns              GoodsReturnNote[]
+  trackingEvents       DistributionTrackingEvent[]
+  gatePassLinks        GatePassDeliveryOrder[]
+  palletTransfers      PalletTransfer[]
+  physicalPallets      PhysicalPallet[]            @relation("CurrentPalletDO")
   physicalPalletEvents PhysicalPalletEvent[]
 
   @@index([status, distributionDate])
@@ -435,6 +438,8 @@ model DOLineItem {
   sku                 String
   batchNumber         String
   qtySent             Int
+  unitPrice           Decimal?          @db.Decimal(14, 4)
+  lineTotal           Decimal?          @db.Decimal(14, 2)
   distributionOrder   DistributionOrder @relation(fields: [distributionOrderId], references: [id], onDelete: Cascade)
 }
 
@@ -510,14 +515,14 @@ model WarehouseGatePass {
   createdAt               DateTime       @default(now())
   updatedAt               DateTime       @updatedAt
 
-  createdBy          User                        @relation("WarehouseGatePassCreator", fields: [createdById], references: [id])
-  items              WarehouseGatePassItem[]
-  externalTokens     GatePassExternalToken[]
-  verificationTokens GatePassVerificationToken[]
-  statusEvents       GatePassStatusEvent[]
-  deliveryOrders     GatePassDeliveryOrder[]
-  palletTransfers    PalletTransfer[]
-  physicalPallets    PhysicalPallet[]            @relation("CurrentPalletGatePass")
+  createdBy            User                        @relation("WarehouseGatePassCreator", fields: [createdById], references: [id])
+  items                WarehouseGatePassItem[]
+  externalTokens       GatePassExternalToken[]
+  verificationTokens   GatePassVerificationToken[]
+  statusEvents         GatePassStatusEvent[]
+  deliveryOrders       GatePassDeliveryOrder[]
+  palletTransfers      PalletTransfer[]
+  physicalPallets      PhysicalPallet[]            @relation("CurrentPalletGatePass")
   physicalPalletEvents PhysicalPalletEvent[]
 
   @@index([status, requestedPickupAt])
@@ -620,22 +625,22 @@ model PalletType {
 }
 
 model PhysicalPallet {
-  id                  String               @id @default(uuid())
-  palletCode          String               @unique
-  palletTypeId        String
-  status              PhysicalPalletStatus @default(IN_WAREHOUSE)
-  condition           PalletCondition      @default(USABLE)
-  currentCustodianId  String?
-  currentGatePassId   String?
-  currentDOId         String?
-  lastMovedAt         DateTime             @default(now())
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id                 String               @id @default(uuid())
+  palletCode         String               @unique
+  palletTypeId       String
+  status             PhysicalPalletStatus @default(IN_WAREHOUSE)
+  condition          PalletCondition      @default(USABLE)
+  currentCustodianId String?
+  currentGatePassId  String?
+  currentDOId        String?
+  lastMovedAt        DateTime             @default(now())
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
 
-  palletType       PalletType          @relation(fields: [palletTypeId], references: [id])
-  currentCustodian PalletCustodian?    @relation(fields: [currentCustodianId], references: [id])
-  currentGatePass  WarehouseGatePass?  @relation("CurrentPalletGatePass", fields: [currentGatePassId], references: [id])
-  currentDO        DistributionOrder?  @relation("CurrentPalletDO", fields: [currentDOId], references: [id])
+  palletType       PalletType            @relation(fields: [palletTypeId], references: [id])
+  currentCustodian PalletCustodian?      @relation(fields: [currentCustodianId], references: [id])
+  currentGatePass  WarehouseGatePass?    @relation("CurrentPalletGatePass", fields: [currentGatePassId], references: [id])
+  currentDO        DistributionOrder?    @relation("CurrentPalletDO", fields: [currentDOId], references: [id])
   events           PhysicalPalletEvent[]
 
   @@index([status, currentCustodianId])
@@ -643,16 +648,16 @@ model PhysicalPallet {
 }
 
 model PhysicalPalletEvent {
-  id                  String             @id @default(uuid())
+  id                  String   @id @default(uuid())
   physicalPalletId    String
   eventType           String
   fromCustodianId     String?
   toCustodianId       String?
   gatePassId          String?
   distributionOrderId String?
-  remarks             String?            @db.Text
+  remarks             String?  @db.Text
   recordedById        String
-  occurredAt          DateTime           @default(now())
+  occurredAt          DateTime @default(now())
 
   physicalPallet    PhysicalPallet     @relation(fields: [physicalPalletId], references: [id], onDelete: Cascade)
   fromCustodian     PalletCustodian?   @relation("PhysicalPalletEventFrom", fields: [fromCustodianId], references: [id])
@@ -810,10 +815,12 @@ model Customer {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
-  addresses       CustomerAddress[]
-  documentIntakes SalesDocumentIntake[]
-  salesOrders     SalesOrder[]
-  registrations   CustomerRegistration[]
+  addresses          CustomerAddress[]
+  documentIntakes    SalesDocumentIntake[]
+  salesOrders        SalesOrder[]
+  registrations      CustomerRegistration[]
+  skuPrices          CustomerSkuPrice[]
+  distributionOrders DistributionOrder[]
 
   @@index([sageCustomerId])
   @@index([legalName])
@@ -992,7 +999,7 @@ model CreditCheckCase {
   soaFileName         String
   soaR2ObjectKey      String    @unique
   status              String    @default("UPLOADED") // UPLOADED, PROCESSING, READY_FOR_SO, ON_HOLD, REJECTED
-  recommendation      String?   // APPROVE, HOLD, REJECT
+  recommendation      String? // APPROVE, HOLD, REJECT
   poData              Json?
   soaData             Json?
   result              Json?
@@ -1013,7 +1020,6 @@ model CreditCheckCase {
   @@index([status, createdAt])
   @@index([recommendation, createdAt])
 }
-
 
 // ---------------------------------------------------------------------------------------------
 // PEDAS / KBP BATCH
@@ -1133,4 +1139,38 @@ model RawMaterialWithdrawalItem {
 
   @@index([withdrawalId])
   @@index([batchNo])
+}
+
+model SkuMasterPrice {
+  id           String   @id @default(uuid())
+  sku          String   @unique
+  name         String
+  category     String?  @default("Finished Goods")
+  description  String?
+  unitsPerPack Int?     @default(1)
+  barcode      String?
+  isActive     Boolean  @default(true)
+  defaultPrice Decimal  @default(0) @db.Decimal(14, 4)
+  uom          String   @default("CTN")
+  currency     String   @default("MYR")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model CustomerSkuPrice {
+  id         String   @id @default(uuid())
+  customerId String
+  sku        String
+  unitPrice  Decimal  @default(0) @db.Decimal(14, 4)
+  uom        String   @default("CTN")
+  currency   String   @default("MYR")
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, sku])
+  @@index([customerId])
+  @@index([sku])
 }
