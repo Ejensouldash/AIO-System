@@ -2,15 +2,18 @@
 
 import { useState, useEffect } from "react"
 import { Sidebar } from "./Sidebar"
-import { Topbar } from "./Topbar"
+import { Topbar, type IncomingSalesOrderSummary } from "./Topbar"
+import { NavigationProgress } from "./NavigationProgress"
 
 export function MobileLayoutWrapper({
   role,
   user,
+  incomingSalesOrders = [],
   children
 }: {
   role: string,
   user: any,
+  incomingSalesOrders?: IncomingSalesOrderSummary[],
   children: React.ReactNode
 }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -41,6 +44,8 @@ export function MobileLayoutWrapper({
 
   return (
     <div className="flex h-screen print:h-auto print:block overflow-hidden print:overflow-visible bg-gray-50 transition-colors">
+      <NavigationProgress />
+
       {isSidebarOpen && (
         <div 
           className="fixed inset-0 bg-black/50 z-40 md:hidden backdrop-blur-sm"
@@ -67,6 +72,7 @@ export function MobileLayoutWrapper({
             onMenuClick={() => setIsSidebarOpen(true)} 
             isCollapsed={isCollapsed}
             onToggleCollapse={handleToggleCollapse}
+            initialIncomingOrders={incomingSalesOrders}
           />
         </div>
         <main className="flex-1 overflow-y-auto print:overflow-visible p-4 md:p-6 bg-gray-50 text-gray-900 transition-colors print:p-0 print:bg-white w-full">

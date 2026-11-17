@@ -67,6 +67,7 @@ export type DOData = {
   distributionDate: string
   destination: string
   customerId?: string | null
+  soId?: string | null
   totalAmount?: number | null
   distributionMethod: string
   sponsorshipDetails?: string | null
@@ -159,9 +160,20 @@ export async function createDistributionOrder(data: DOData) {
           }
         })
       }
+
+      // 3. If tied to a Sales Order, mark it as fulfilled
+      if (data.soId) {
+        await tx.salesOrder.update({
+          where: { id: data.soId },
+          data: { status: "FULFILLED" }
+        }).catch(err => console.warn("Failed to update SalesOrder status to FULFILLED:", err))
+      }
     })
 
     revalidatePath("/forms/warehouse/distribution")
+    revalidatePath("/forms/warehouse/overview")
+    revalidatePath("/forms/warehouse/dashboard")
+    revalidatePath("/forms/sales-ordering/orders")
     return { success: true }
   } catch (error: any) {
     console.error("Failed to create DO:", error)

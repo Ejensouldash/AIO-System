@@ -1,27 +1,51 @@
 "use client"
 
 import { useState } from "react"
-import { Users, FileCheck2, Tag } from "lucide-react"
+import { Users, FileCheck2, Tag, Loader2 } from "lucide-react"
 import { CustomerRegistrationSection } from "./CustomerRegistrationSection"
+import { SkuPricingSection } from "./SkuPricingSection"
+import { getPricingCustomersAction } from "@/app/actions/pricing"
 
 export function CustomerPageTabs({
   customersContent,
   registrations,
-  pricingContent,
+  masterPrices,
+  initialPricingCustomers = [],
+  initialTab = "CUSTOMERS",
 }: {
   customersContent: React.ReactNode
   registrations: any[]
-  pricingContent?: React.ReactNode
+  masterPrices: any[]
+  initialPricingCustomers?: any[]
+  initialTab?: "CUSTOMERS" | "PRICING" | "REGISTRATIONS"
 }) {
-  const [tab, setTab] = useState<"CUSTOMERS" | "PRICING" | "REGISTRATIONS">("CUSTOMERS")
+  const [tab, setTab] = useState<"CUSTOMERS" | "PRICING" | "REGISTRATIONS">(initialTab)
+  const [pricingCustomers, setPricingCustomers] = useState<any[]>(initialPricingCustomers)
+  const [loadingPricing, setLoadingPricing] = useState(false)
+
   const pendingCount = registrations.filter(r => r.status === "PENDING").length
+
+  const handleSelectTab = async (selected: "CUSTOMERS" | "PRICING" | "REGISTRATIONS") => {
+    setTab(selected)
+    if (selected === "PRICING" && pricingCustomers.length === 0) {
+      setLoadingPricing(true)
+      try {
+        const fetched = await getPricingCustomersAction()
+        setPricingCustomers(fetched)
+      } catch (err) {
+        console.error("Failed to load customer pricing matrix:", err)
+      } finally {
+        setLoadingPricing(false)
+      }
+    }
+  }
 
   return (
     <div className="space-y-6">
       {/* Top Main Navigation Tabs */}
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
         <button
-          onClick={() => setTab("CUSTOMERS")}
+          onClick={() => handleSelectTab("CUSTOMERS")}
           className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition ${
             tab === "CUSTOMERS"
               ? "bg-slate-900 text-white shadow-sm"
@@ -32,7 +56,7 @@ export function CustomerPageTabs({
         </button>
 
         <button
-          onClick={() => setTab("PRICING")}
+          onClick={() => handleSelectTab("PRICING")}
           className={`inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition ${
             tab === "PRICING"
               ? "bg-amber-600 text-white shadow-sm"
@@ -43,7 +67,7 @@ export function CustomerPageTabs({
         </button>
 
         <button
-          onClick={() => setTab("REGISTRATIONS")}
+          onClick={() => handleSelectTab("REGISTRATIONS")}
           className={`relative inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-black transition ${
             tab === "REGISTRATIONS"
               ? "bg-cyan-600 text-white shadow-sm"
@@ -60,7 +84,22 @@ export function CustomerPageTabs({
       </div>
 
       {tab === "CUSTOMERS" && customersContent}
-      {tab === "PRICING" && pricingContent}
+
+      {tab === "PRICING" && (
+        loadingPricing ? (
+          <div className="flex flex-col items-center justify-center p-16 bg-white rounded-2xl border border-slate-200 shadow-sm text-center">
+            <Loader2 className="h-8 w-8 animate-spin text-amber-600 mb-3" />
+            <p className="font-black text-slate-900 text-sm">Loading SKU Pricing Matrix...</p>
+            <p className="text-xs text-slate-500 mt-1">Retrieving pricing configurations on demand</p>
+          </div>
+        ) : (
+          <SkuPricingSection
+            masterPrices={masterPrices}
+            customers={pricingCustomers}
+          />
+        )
+      )}
+
       {tab === "REGISTRATIONS" && (
         <CustomerRegistrationSection
           registrations={registrations}

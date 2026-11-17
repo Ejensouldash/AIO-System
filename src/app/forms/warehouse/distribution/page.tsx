@@ -16,6 +16,7 @@ export default async function DistributionIndex() {
     include: {
       createdBy: true,
       items: true,
+      customer: { select: { id: true, customerCode: true, legalName: true, tradingName: true } },
       trackingEvents: { orderBy: { recordedAt: "desc" }, take: 1 },
     },
   })

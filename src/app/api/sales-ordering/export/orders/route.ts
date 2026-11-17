@@ -3,8 +3,17 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import ExcelJS from "exceljs"
+import { canAccessSalesOrderingTab, getSalesOrderingAccess } from "@/lib/sales-ordering/access"
 
 export async function GET() {
+  const access = await getSalesOrderingAccess()
+  if (!access || !canAccessSalesOrderingTab(access, "orders")) {
+    return NextResponse.json(
+      { error: "Unauthorized. Sales order access required." },
+      { status: 403 }
+    )
+  }
+
   try {
     // 1. Fetch only APPROVED Sales Orders
     const orders = await prisma.salesOrder.findMany({
@@ -80,4 +89,3 @@ export async function GET() {
     return new NextResponse("Failed to export Excel", { status: 500 })
   }
 }
-

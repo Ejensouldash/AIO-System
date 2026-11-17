@@ -347,3 +347,31 @@ export async function importCustomerPricesExcelAction(formData: FormData) {
     return { success: false, error: error.message }
   }
 }
+
+export async function getPricingCustomersAction() {
+  const customers = await prisma.customer.findMany({
+    select: {
+      id: true,
+      customerCode: true,
+      legalName: true,
+      tradingName: true,
+      skuPrices: true,
+    },
+    orderBy: { legalName: "asc" },
+    take: 500,
+  })
+
+  return customers.map(c => {
+    const customPrices: Record<string, number> = {}
+    for (const sp of c.skuPrices) {
+      customPrices[sp.sku] = Number(sp.unitPrice)
+    }
+    return {
+      id: c.id,
+      customerCode: c.customerCode,
+      legalName: c.legalName,
+      tradingName: c.tradingName,
+      customPrices,
+    }
+  })
+}

@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useState, useEffect } from "react"
 import { LayoutDashboard, Package, Truck, AlertOctagon, ClipboardCheck, ShieldCheck, FileBarChart } from "lucide-react"
 
 /**
@@ -21,6 +22,13 @@ export function WarehouseTabs({
   reports?: boolean
 }) {
   const pathname = usePathname()
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
+
+  useEffect(() => {
+    setPendingHref(null)
+  }, [pathname])
+
+  const currentPath = pendingHref || pathname
 
   return (
     <div className="mb-8 border-b border-gray-200 overflow-x-auto">
@@ -29,8 +37,9 @@ export function WarehouseTabs({
           <>
             <Link
               href={"/forms/warehouse/overview" as any}
+              onClick={() => setPendingHref("/forms/warehouse/overview")}
               className={`flex items-center pb-4 text-sm font-black uppercase tracking-wider border-b-4 transition-colors ${
-                pathname === "/forms/warehouse/overview"
+                currentPath === "/forms/warehouse/overview"
                   ? "border-emerald-500 text-emerald-700"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
@@ -41,8 +50,9 @@ export function WarehouseTabs({
 
             <Link
               href="/forms/warehouse/dashboard"
+              onClick={() => setPendingHref("/forms/warehouse/dashboard")}
               className={`flex items-center pb-4 text-sm font-black uppercase tracking-wider border-b-4 transition-colors ${
-                pathname === "/forms/warehouse/dashboard"
+                currentPath === "/forms/warehouse/dashboard"
                   ? "border-emerald-500 text-emerald-700"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
@@ -53,8 +63,9 @@ export function WarehouseTabs({
 
             <Link
               href="/forms/warehouse/distribution"
+              onClick={() => setPendingHref("/forms/warehouse/distribution")}
               className={`flex items-center pb-4 text-sm font-black uppercase tracking-wider border-b-4 transition-colors ${
-                pathname.startsWith("/forms/warehouse/distribution")
+                currentPath.startsWith("/forms/warehouse/distribution")
                   ? "border-blue-500 text-blue-700"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
@@ -65,8 +76,9 @@ export function WarehouseTabs({
 
             <Link
               href="/forms/warehouse/quarantine"
+              onClick={() => setPendingHref("/forms/warehouse/quarantine")}
               className={`flex items-center pb-4 text-sm font-black uppercase tracking-wider border-b-4 transition-colors ${
-                pathname.startsWith("/forms/warehouse/quarantine")
+                currentPath.startsWith("/forms/warehouse/quarantine")
                   ? "border-red-500 text-red-700"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               }`}
@@ -80,8 +92,9 @@ export function WarehouseTabs({
         {gatePass && (
           <Link
             href="/forms/warehouse/gatepass"
+            onClick={() => setPendingHref("/forms/warehouse/gatepass")}
             className={`flex items-center pb-4 text-sm font-black uppercase tracking-wider border-b-4 transition-colors ${
-              pathname.startsWith("/forms/warehouse/gatepass") && !pathname.startsWith("/forms/warehouse/gatepass/security")
+              currentPath.startsWith("/forms/warehouse/gatepass") && !currentPath.startsWith("/forms/warehouse/gatepass/security")
                 ? "border-cyan-500 text-cyan-700"
                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
             }`}
@@ -94,8 +107,9 @@ export function WarehouseTabs({
         {security && (
           <Link
             href="/forms/warehouse/gatepass/security"
+            onClick={() => setPendingHref("/forms/warehouse/gatepass/security")}
             className={`flex items-center pb-4 text-sm font-black uppercase tracking-wider border-b-4 transition-colors ${
-              pathname.startsWith("/forms/warehouse/gatepass/security")
+              currentPath.startsWith("/forms/warehouse/gatepass/security")
                 ? "border-amber-500 text-amber-700"
                 : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
             }`}
@@ -105,19 +119,21 @@ export function WarehouseTabs({
           </Link>
         )}
 
-        {reports && <Link
-          href="/forms/warehouse/reports"
-          className={`flex items-center pb-4 text-sm font-black uppercase tracking-wider border-b-4 transition-colors ${
-            pathname.startsWith("/forms/warehouse/reports")
-              ? "border-purple-500 text-purple-700" 
-              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-          }`}
-        >
-          <FileBarChart className="w-5 h-5 mr-2" />
-          {fullWarehouse ? "Reports" : "Daily Raw Material"}
-        </Link>}
+        {reports && (
+          <Link
+            href="/forms/warehouse/reports"
+            onClick={() => setPendingHref("/forms/warehouse/reports")}
+            className={`flex items-center pb-4 text-sm font-black uppercase tracking-wider border-b-4 transition-colors ${
+              currentPath.startsWith("/forms/warehouse/reports")
+                ? "border-purple-500 text-purple-700" 
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+            }`}
+          >
+            <FileBarChart className="w-5 h-5 mr-2" />
+            {fullWarehouse ? "Reports" : "Daily Raw Material"}
+          </Link>
+        )}
       </div>
     </div>
   )
 }
-

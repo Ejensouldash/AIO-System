@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { FileSpreadsheet, Loader2, Upload } from "lucide-react"
+import { FileSpreadsheet, Loader2, Upload, UserPlus, Download } from "lucide-react"
+import { AddCustomerModal } from "./AddCustomerModal"
 
 export function CustomerMasterImport() {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -13,19 +14,30 @@ export function CustomerMasterImport() {
   const [stage, setStage] = useState("")
   const [message, setMessage] = useState("")
   const [error, setError] = useState("")
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false)
 
   async function importFile() {
     if (!file) return
-    setBusy(true); setProgress(0); setStage("Preparing Excel file..."); setError(""); setMessage("")
+    setBusy(true)
+    setProgress(0)
+    setStage("Preparing Excel file...")
+    setError("")
+    setMessage("")
     try {
-      const result = await new Promise<{ total: number; created: number; updated: number; needsReview: number; sheetName?: string }>((resolve, reject) => {
+      const result = await new Promise<{
+        total: number
+        created: number
+        updated: number
+        needsReview: number
+        sheetName?: string
+      }>((resolve, reject) => {
         const request = new XMLHttpRequest()
         request.open("POST", "/api/sales-ordering/customers/import")
-        request.upload.onprogress = event => {
+        request.upload.onprogress = (event) => {
           if (!event.lengthComputable) return
-          const uploaded = Math.max(1, Math.round(event.loaded / event.total * 70))
+          const uploaded = Math.max(1, Math.round((event.loaded / event.total) * 70))
           setProgress(uploaded)
-          setStage(`Uploading Excel file... ${Math.round(event.loaded / event.total * 100)}%`)
+          setStage(`Uploading Excel file... ${Math.round((event.loaded / event.total) * 100)}%`)
         }
         request.upload.onload = () => {
           setProgress(78)
@@ -37,26 +49,146 @@ export function CustomerMasterImport() {
           setStage("Upserting customers into system...")
         }
         request.onload = () => {
-          let payload: { error?: string; total?: number; created?: number; updated?: number; needsReview?: number; sheetName?: string } = {}
-          try { payload = JSON.parse(request.responseText) } catch { /* handled below */ }
+          let payload: {
+            error?: string
+            total?: number
+            created?: number
+            updated?: number
+            needsReview?: number
+            sheetName?: string
+          } = {}
+          try {
+            payload = JSON.parse(request.responseText)
+          } catch {
+            /* handled below */
+          }
           if (request.status < 200 || request.status >= 300) {
             reject(new Error(payload.error || "Import failed"))
             return
           }
           setProgress(100)
           setStage("Import completed.")
-          resolve({ total: payload.total || 0, created: payload.created || 0, updated: payload.updated || 0, needsReview: payload.needsReview || 0, sheetName: payload.sheetName })
+          resolve({
+            total: payload.total || 0,
+            created: payload.created || 0,
+            updated: payload.updated || 0,
+            needsReview: payload.needsReview || 0,
+            sheetName: payload.sheetName,
+          })
         }
-        request.onerror = () => reject(new Error("Connection interrupted during import. Please try again."))
+        request.onerror = () =>
+          reject(new Error("Connection interrupted during import. Please try again."))
         const form = new FormData()
         form.append("file", file)
         request.send(form)
       })
-      setMessage(`${result.total.toLocaleString()} customers processed from ${result.sheetName || "workbook"}: ${result.created.toLocaleString()} new, ${result.updated.toLocaleString()} updated, ${result.needsReview.toLocaleString()} need review.`)
+      setMessage(
+        `${result.total.toLocaleString()} customers processed from ${result.sheetName || "workbook"}: ${result.created.toLocaleString()} new, ${result.updated.toLocaleString()} updated, ${result.needsReview.toLocaleString()} need review.`
+      )
+      setFile(null)
       router.refresh()
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Import failed") }
-    finally { setBusy(false) }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Import failed")
+    } finally {
+      setBusy(false)
+    }
   }
 
-  return <div className="rounded-2xl border border-violet-200 bg-violet-50 p-5"><div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"><div><div className="flex items-center gap-2 font-black text-violet-950"><FileSpreadsheet className="h-5 w-5" /> Import Customer Master Data</div><p className="mt-1 text-sm text-violet-700">System detects the sheet containing the Customer ID column, then upserts using the Customer ID.</p></div><div className="flex flex-col gap-2 sm:flex-row"><input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={event => setFile(event.target.files?.[0] || null)} /><button type="button" disabled={busy} onClick={() => inputRef.current?.click()} className="rounded-xl border border-violet-300 bg-white px-4 py-3 text-sm font-black text-violet-800 disabled:opacity-60">{file ? file.name : "Choose Excel"}</button><button type="button" onClick={importFile} disabled={!file || busy} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-3 text-sm font-black text-white disabled:bg-violet-300">{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}{busy ? "Importing" : "Import"}</button></div></div>{busy && <div className="mt-5 rounded-xl border border-violet-200 bg-white p-4" aria-live="polite"><div className="flex items-center justify-between gap-4"><p className="text-sm font-black text-violet-950">{stage}</p><span className="text-sm font-black text-violet-700">{progress}%</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-violet-100"><div className="h-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-500 to-cyan-500 transition-all duration-500 ease-out" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-xs font-semibold text-violet-700">Do not close this page until the import is complete.</p></div>}{message && <p className="mt-4 rounded-xl bg-white p-3 text-sm font-bold text-emerald-700">{message}</p>}{error && <p className="mt-4 rounded-xl bg-white p-3 text-sm font-bold text-rose-700">{error}</p>}</div>
+  return (
+    <>
+      <div className="space-y-4">
+        {/* Action Bar: Manual Add + Clean Export + Import */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <button
+              type="button"
+              onClick={() => setIsAddModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-cyan-600 px-4 py-2.5 text-sm font-black text-white hover:bg-cyan-500 transition shadow-sm"
+            >
+              <UserPlus className="h-4 w-4" /> Add Customer
+            </button>
+
+            <a
+              href="/api/sales-ordering/customers/export"
+              className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-black text-slate-800 hover:bg-slate-50 transition shadow-sm"
+              title="Download Masterlist in exact 30-header structure"
+            >
+              <Download className="h-4 w-4 text-emerald-600" /> Export Excel
+            </a>
+          </div>
+        </div>
+
+        {/* Import Banner */}
+        <div className="rounded-2xl border border-violet-200 bg-violet-50/80 p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <div className="flex items-center gap-2 font-black text-violet-950">
+                <FileSpreadsheet className="h-5 w-5 text-violet-600" /> Import Customer Master Data
+              </div>
+              <p className="mt-1 text-xs text-violet-700">
+                Seamlessly bulk import customers using the 30-column Masterlist Customer structure. Existing Customer IDs will be updated.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                ref={inputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                className="hidden"
+                onChange={(event) => setFile(event.target.files?.[0] || null)}
+              />
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => inputRef.current?.click()}
+                className="rounded-xl border border-violet-300 bg-white px-4 py-2.5 text-xs font-black text-violet-800 disabled:opacity-60 hover:bg-violet-50 transition"
+              >
+                {file ? file.name : "Choose Excel File"}
+              </button>
+              <button
+                type="button"
+                onClick={importFile}
+                disabled={!file || busy}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-4 py-2.5 text-xs font-black text-white disabled:bg-violet-300 hover:bg-violet-600 transition"
+              >
+                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                {busy ? "Importing..." : "Upload & Sync"}
+              </button>
+            </div>
+          </div>
+
+          {busy && (
+            <div className="mt-4 rounded-xl border border-violet-200 bg-white p-4" aria-live="polite">
+              <div className="flex items-center justify-between gap-4">
+                <p className="text-xs font-black text-violet-950">{stage}</p>
+                <span className="text-xs font-black text-violet-700">{progress}%</span>
+              </div>
+              <div className="mt-2.5 h-2 overflow-hidden rounded-full bg-violet-100">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-violet-600 via-fuchsia-500 to-cyan-500 transition-all duration-500 ease-out"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="mt-2 text-[11px] font-semibold text-violet-700">
+                Do not close or navigate away from this page until the import is complete.
+              </p>
+            </div>
+          )}
+
+          {message && (
+            <p className="mt-3 rounded-xl bg-white p-3 text-xs font-bold text-emerald-700 border border-emerald-200">
+              {message}
+            </p>
+          )}
+          {error && (
+            <p className="mt-3 rounded-xl bg-white p-3 text-xs font-bold text-rose-700 border border-rose-200">
+              {error}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <AddCustomerModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} />
+    </>
+  )
 }

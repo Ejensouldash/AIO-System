@@ -99,6 +99,7 @@ export async function getDistributionTraceData(id: string) {
     where: { id },
     include: {
       createdBy: true,
+      customer: true,
       items: true,
       returns: true,
       gatePassLinks: {

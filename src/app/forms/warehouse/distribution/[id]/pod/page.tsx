@@ -582,9 +582,28 @@ export default function PrintPODPage({ params }: { params: Promise<{ id: string 
                   )}
                 </div>
                 <div>
-                  <div className="info-row">
-                    <span className="info-label">Transfer To</span>
-                    <span className="info-value" style={{ fontWeight: 700 }}>{doOrder.destination}</span>
+                  <div className="info-row" style={{ alignItems: 'flex-start' }}>
+                    <span className="info-label" style={{ paddingTop: '2px' }}>Transfer To</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                      {doOrder.customer ? (
+                        <>
+                          <div className="info-value" style={{ fontWeight: 800, fontSize: '11px', color: '#003366', lineHeight: 1.3 }}>
+                            {doOrder.customer.legalName}
+                            {doOrder.customer.customerCode && (
+                              <span style={{ fontSize: '9px', fontWeight: 700, color: '#4a6080', marginLeft: '6px' }}>
+                                ({doOrder.customer.customerCode})
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: '9.5px', color: '#334155', lineHeight: 1.35 }}>
+                            <span style={{ fontWeight: 700, color: '#003366', fontSize: '8.5px', textTransform: 'uppercase' }}>Address: </span>
+                            {doOrder.destination}
+                          </div>
+                        </>
+                      ) : (
+                        <span className="info-value" style={{ fontWeight: 700 }}>{doOrder.destination}</span>
+                      )}
+                    </div>
                   </div>
                   <div className="info-row">
                     <span className="info-label">Vehicle No</span>

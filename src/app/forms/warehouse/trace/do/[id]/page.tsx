@@ -165,7 +165,17 @@ export default async function DistributionTracePage({ params }: { params: Promis
               </span>
             </div>
             <h1 className="mt-1 font-mono text-2xl font-black text-slate-950 sm:text-3xl">{order.doNumber}</h1>
-            <p className="mt-0.5 text-xs sm:text-sm font-bold text-slate-500">{order.destination}</p>
+            {(order as any).customer && (
+              <p className="mt-1 text-sm font-black text-slate-800">
+                {(order as any).customer.legalName}
+                {(order as any).customer.customerCode && (
+                  <span className="ml-2 font-mono text-xs font-bold text-slate-500">
+                    ({(order as any).customer.customerCode})
+                  </span>
+                )}
+              </p>
+            )}
+            <p className="mt-0.5 text-xs sm:text-sm font-medium text-slate-500">{order.destination}</p>
           </div>
         </div>
 

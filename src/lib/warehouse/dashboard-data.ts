@@ -46,6 +46,27 @@ export type DashboardTransitOrder = {
   daysInTransit: number
 }
 
+export type DashboardSalesOrderItem = {
+  sku: string | null
+  description: string
+  qtyOrdered: number
+  uom: string
+  unitPrice?: number
+  lineTotal?: number
+}
+
+export type DashboardSalesOrder = {
+  id: string
+  internalSoNo: string
+  customerName: string
+  customerCode?: string | null
+  poNumber: string | null
+  totalCartons: number
+  submittedAt: string
+  deliveryAddress?: string | null
+  items: DashboardSalesOrderItem[]
+}
+
 export type WarehouseDashboardData = {
   today: string
   monthStart: string
@@ -55,6 +76,7 @@ export type WarehouseDashboardData = {
   newBatchesPrevWeek: number
   daily: DailyFlow[]
   pendingHandovers: number
+  incomingSalesOrders: DashboardSalesOrder[]
   inTransit: DashboardTransitOrder[]
   quarantine: { count: number; units: number; logged30d: number; resolved30d: number }
   gatepass: { loadingNow: number; activeNow: number }
@@ -87,6 +109,7 @@ export async function getWarehouseDashboardData() {
     loadingNow,
     activeNow,
     doIndex,
+    rawIncomingSalesOrders,
   ] = await Promise.all([
     prisma.productionHandover.findMany({
       where: { status: "PENDING" },
@@ -143,6 +166,27 @@ export async function getWarehouseDashboardData() {
       orderBy: { createdAt: "desc" },
       take: 300,
       select: { id: true, doNumber: true, destination: true, status: true }
+    }),
+    prisma.salesOrder.findMany({
+      where: {
+        submittedToWarehouseAt: { not: null },
+        status: "SUBMITTED_TO_WAREHOUSE",
+      },
+      include: {
+        customer: { select: { legalName: true, customerCode: true } },
+        items: {
+          select: {
+            sku: true,
+            descriptionSnapshot: true,
+            qtyOrdered: true,
+            uom: true,
+            unitPrice: true,
+            lineTotal: true,
+          },
+        },
+      },
+      orderBy: { submittedToWarehouseAt: "desc" },
+      take: 20,
     }),
   ])
 
@@ -242,6 +286,24 @@ export async function getWarehouseDashboardData() {
     newBatchesPrevWeek,
     daily: [...daily.values()],
     pendingHandovers: pendingHandovers.length,
+    incomingSalesOrders: rawIncomingSalesOrders.map(so => ({
+      id: so.id,
+      internalSoNo: so.internalSoNo,
+      customerName: so.customer?.legalName || "Unknown Customer",
+      customerCode: so.customer?.customerCode || null,
+      poNumber: so.poNumber || null,
+      totalCartons: so.items.reduce((sum, item) => sum + Number(item.qtyOrdered || 0), 0),
+      submittedAt: so.submittedToWarehouseAt ? so.submittedToWarehouseAt.toISOString() : so.createdAt.toISOString(),
+      deliveryAddress: (so.deliveryAddressSnapshot as any)?.text || (so.deliveryAddressSnapshot as any)?.fullAddress || null,
+      items: so.items.map(it => ({
+        sku: it.sku,
+        description: it.descriptionSnapshot,
+        qtyOrdered: Number(it.qtyOrdered || 0),
+        uom: it.uom || "CTN",
+        unitPrice: Number(it.unitPrice || 0),
+        lineTotal: Number(it.lineTotal || 0),
+      })),
+    })),
     inTransit: inTransitOrders.map(order => ({
       id: order.id,
       doNumber: order.doNumber,

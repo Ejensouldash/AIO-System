@@ -84,6 +84,18 @@ export function titleCaseSection(s: string): string {
   return v.charAt(0).toUpperCase() + v.slice(1)
 }
 
+/** Resolves freeform or uppercase SKU names (e.g. "800ML X 20") to canonical keys (e.g. "p800_20"). */
+export function resolveSkuKey(raw: string): string {
+  if (!raw) return ""
+  if (SKUS.some(s => s.key === raw)) return raw
+  const clean = raw.toLowerCase().replace(/[^a-z0-9]/g, "")
+  if (clean.includes("800") && clean.includes("20")) return "p800_20"
+  if (clean.includes("800") && clean.includes("12")) return "p800_12"
+  if (clean.includes("425") && clean.includes("24")) return "p425_24"
+  if (clean.includes("425") && clean.includes("6")) return "p425_6"
+  return raw
+}
+
 // ---------------------------------------------------------------------------------------------
 // Main aggregation
 // ---------------------------------------------------------------------------------------------
@@ -196,7 +208,8 @@ export async function computeProductionAnalytics(from: string, to: string): Prom
 
     // Production. totalBox is canonical; batch rows are only checked for reconciliation.
     for (const prod of report.productions) {
-      const sku = skuByKey.get(prod.productType)
+      const skuKey = resolveSkuKey(prod.productType)
+      const sku = skuByKey.get(skuKey)
       const boxes = prod.totalBox || 0
       const pcs = boxes * (sku?.perBox ?? 0)
 
@@ -205,13 +218,13 @@ export async function computeProductionAnalytics(from: string, to: string): Prom
       if (day) {
         day.boxes += boxes
         day.pcs += pcs
-        day.bySku[prod.productType] = (day.bySku[prod.productType] || 0) + boxes
+        day.bySku[skuKey] = (day.bySku[skuKey] || 0) + boxes
         day.byShift[report.shift] = (day.byShift[report.shift] || 0) + boxes
       }
       if (shift) { shift.boxes += boxes; shift.pcs += pcs }
       if (line) { line.boxes += boxes; line.pcs += pcs }
 
-      const totals = skuTotals.get(prod.productType)
+      const totals = skuTotals.get(skuKey)
       if (totals) { totals.boxes += boxes; totals.pcs += pcs }
 
       const realBatches = prod.batches.filter(b => (b.batchNo || "").trim() !== "" || b.qty > 0)
@@ -257,7 +270,10 @@ export async function computeProductionAnalytics(from: string, to: string): Prom
         categoryStats[cat].rejectsAfter += afterVal
       }
 
-      const skuKey = rejectSkuKey(rej.item)
+      let skuKey = rejectSkuKey(rej.item)
+      if (!skuKey && report.productions.length === 1) {
+        skuKey = resolveSkuKey(report.productions[0].productType)
+      }
       if (skuKey) {
         const totals = skuTotals.get(skuKey)
         if (totals) {
@@ -312,6 +328,15 @@ export async function computeProductionAnalytics(from: string, to: string): Prom
   }
 
   // ---- reject rates ---------------------------------------------------------------------------
+  // If no explicit inventory usage logs were recorded in DailyReport.inventory (e.g. from imported DPRs),
+  // derive the standard material consumption from production outputs:
+  if (categoryStats.BOTTLE.usage === 0 && totalPcs > 0) {
+    categoryStats.BOTTLE.usage = totalPcs
+    categoryStats.CAP.usage = totalPcs
+    categoryStats.LABEL.usage = totalPcs
+    categoryStats.BOX.usage = totalBoxes
+  }
+
   for (const cat of Object.keys(categoryStats)) {
     const { usage, rejects } = categoryStats[cat]
     categoryStats[cat].rate = round2(pct(rejects, usage + rejects))

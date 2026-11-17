@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { 
   LayoutDashboard, 
   ShoppingCart, 
@@ -12,12 +12,17 @@ import {
   Settings, 
   ChevronDown, 
   ChevronRight,
-  ChevronLeft,
   X,
-  PackageCheck,
-  ClipboardList,
+  FileCheck,
+  FileSearch,
   ShieldCheck,
-  FileSpreadsheet
+  Package,
+  Truck,
+  ClipboardCheck,
+  AlertOctagon,
+  FileBarChart,
+  ClipboardList,
+  History,
 } from "lucide-react"
 
 export function Sidebar({ 
@@ -34,6 +39,15 @@ export function Sidebar({
   onToggleCollapse?: () => void
 }) {
   const pathname = usePathname()
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
+
+  // Clear pendingHref once navigation finishes and pathname updates
+  useEffect(() => {
+    setPendingHref(null)
+  }, [pathname])
+
+  const currentPath = pendingHref || pathname
+
   const isSuperAdmin = role === "SUPERADMIN"
   const userModules = new Set(user?.modules || [])
 
@@ -41,6 +55,7 @@ export function Sidebar({
   const hasAnyAccess = (mods: string[]) => isSuperAdmin || mods.some(m => userModules.has(m))
 
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    salesOrdering: true,
     production: true,
     warehouse: true,
   })
@@ -48,6 +63,10 @@ export function Sidebar({
   const toggleSection = (key: string) => {
     setOpenSections(prev => ({ ...prev, [key]: !prev[key] }))
   }
+
+  // Sales Ordering tab permission check
+  const canSODTab = (tabModule: string) =>
+    isSuperAdmin || userModules.has("SALES_ORDERING") || userModules.has(tabModule)
 
   const sodModules = [
     "SALES_ORDERING",
@@ -69,6 +88,21 @@ export function Sidebar({
     "RAW_MATERIAL_WITHDRAWAL",
     "PALLET_LEDGER",
   ])
+
+  // Submenu items for Sales Ordering
+  const sodSubmenu = [
+    ...(canSODTab("SALES_ORDERING_DASHBOARD") ? [{ label: "Dashboard", href: "/forms/sales-ordering" }] : []),
+    ...(canSODTab("SALES_ORDERING_CUSTOMERS") ? [{ label: "Customers", href: "/forms/sales-ordering/customers" }] : []),
+    ...(canSODTab("SALES_ORDERING_DOCUMENTS") ? [{ label: "Documents", href: "/forms/sales-ordering/documents" }] : []),
+    ...(canSODTab("SALES_ORDERING_INTAKE") ? [{ label: "PO Upload", href: "/forms/sales-ordering/intake" }] : []),
+    ...(canSODTab("SALES_ORDERING_CREDIT_CHECK") ? [{ label: "PO-SOA Check", href: "/forms/sales-ordering/credit-check" }] : []),
+    ...(canSODTab("SALES_ORDERING_ORDERS") ? [{ label: "Sales Orders", href: "/forms/sales-ordering/orders" }] : []),
+  ]
+
+  const handleLinkClick = (href: string) => {
+    setPendingHref(href)
+    if (onMobileClose) onMobileClose()
+  }
 
   return (
     <aside className={`h-full bg-slate-900 text-slate-100 flex flex-col border-r border-slate-800 transition-all duration-300 ${isCollapsed ? "w-20" : "w-64"}`}>
@@ -104,13 +138,13 @@ export function Sidebar({
       </div>
 
       {/* Nav Menu */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1.5">
         {/* Control Tower Dashboard */}
         <Link
           href="/dashboard"
-          onClick={onMobileClose}
+          onClick={() => handleLinkClick("/dashboard")}
           className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-            pathname === "/dashboard"
+            currentPath === "/dashboard"
               ? "bg-cyan-600 text-white shadow-sm"
               : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
           }`}
@@ -120,46 +154,146 @@ export function Sidebar({
           {!isCollapsed && <span>Control Tower</span>}
         </Link>
 
-        {/* Sales Ordering */}
+        {/* 1. Sales Ordering Accordion (Split-Click) */}
         {showSOD && (
-          <Link
-            href="/forms/sales-ordering"
-            onClick={onMobileClose}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              pathname.startsWith("/forms/sales-ordering")
-                ? "bg-cyan-600 text-white shadow-sm"
-                : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
-            }`}
-            title="Sales Ordering"
-          >
-            <ShoppingCart className="h-5 w-5 shrink-0" />
-            {!isCollapsed && <span>Sales Ordering</span>}
-          </Link>
+          <div>
+            {!isCollapsed ? (
+              <>
+                <div
+                  className={`flex items-center justify-between rounded-xl transition-all ${
+                    currentPath.startsWith("/forms/sales-ordering")
+                      ? "bg-slate-800/90 text-white"
+                      : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
+                  }`}
+                >
+                  <Link
+                    href="/forms/sales-ordering"
+                    onClick={() => handleLinkClick("/forms/sales-ordering")}
+                    className="flex-1 flex items-center gap-3 px-3 py-2.5 text-sm font-semibold min-w-0"
+                    title="Sales Ordering Dashboard"
+                  >
+                    <ShoppingCart className="h-5 w-5 shrink-0 text-cyan-400" />
+                    <span className="truncate">Sales Ordering</span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      toggleSection("salesOrdering")
+                    }}
+                    className="p-2.5 text-slate-400 hover:text-white transition-colors"
+                    aria-label="Toggle Sales Ordering submenu"
+                  >
+                    {openSections.salesOrdering ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+
+                {openSections.salesOrdering && (
+                  <div className="ml-7 mt-1 space-y-1 border-l-2 border-slate-800 pl-2">
+                    {sodSubmenu.map((item) => {
+                      const active =
+                        item.href === "/forms/sales-ordering"
+                          ? currentPath === item.href
+                          : currentPath.startsWith(item.href)
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => handleLinkClick(item.href)}
+                          className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                            active
+                              ? "bg-cyan-600/30 text-cyan-300 font-bold"
+                              : "text-slate-400 hover:text-white hover:bg-slate-800/50"
+                          }`}
+                        >
+                          {item.label}
+                        </Link>
+                      )
+                    })}
+                  </div>
+                )}
+              </>
+            ) : (
+              <Link
+                href="/forms/sales-ordering"
+                onClick={() => handleLinkClick("/forms/sales-ordering")}
+                className={`flex justify-center py-2.5 rounded-xl transition ${
+                  currentPath.startsWith("/forms/sales-ordering")
+                    ? "bg-cyan-600 text-white"
+                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`}
+                title="Sales Ordering"
+              >
+                <ShoppingCart className="h-5 w-5" />
+              </Link>
+            )}
+          </div>
         )}
 
-        {/* Production Accordion */}
+        {/* 2. Production Accordion (Split-Click) */}
         {showProduction && (
           <div>
             {!isCollapsed ? (
               <>
-                <button
-                  onClick={() => toggleSection("production")}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-800/80 hover:text-white transition-colors"
+                <div
+                  className={`flex items-center justify-between rounded-xl transition-all ${
+                    currentPath.startsWith("/forms/production") || currentPath === "/forms/dashboard"
+                      ? "bg-slate-800/90 text-white"
+                      : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
+                  }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <Factory className="h-5 w-5 shrink-0" />
-                    <span>Production</span>
-                  </div>
-                  {openSections.production ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                </button>
+                  <Link
+                    href="/forms/dashboard"
+                    onClick={() => handleLinkClick("/forms/dashboard")}
+                    className="flex-1 flex items-center gap-3 px-3 py-2.5 text-sm font-semibold min-w-0"
+                    title="Production Dashboard"
+                  >
+                    <Factory className="h-5 w-5 shrink-0 text-emerald-400" />
+                    <span className="truncate">Production</span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      toggleSection("production")
+                    }}
+                    className="p-2.5 text-slate-400 hover:text-white transition-colors"
+                    aria-label="Toggle Production submenu"
+                  >
+                    {openSections.production ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+
                 {openSections.production && (
-                  <div className="ml-8 mt-1 space-y-1">
+                  <div className="ml-7 mt-1 space-y-1 border-l-2 border-slate-800 pl-2">
+                    {/* Strict Order: Dashboard > Forms Home & Reports > Daily KAR Logs > Handover Form > Production Stock */}
+                    <Link
+                      href="/forms/dashboard"
+                      onClick={() => handleLinkClick("/forms/dashboard")}
+                      className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        currentPath === "/forms/dashboard"
+                          ? "bg-emerald-600/30 text-emerald-300 font-bold"
+                          : "text-slate-400 hover:text-white hover:bg-slate-800/50"
+                      }`}
+                    >
+                      Dashboard
+                    </Link>
                     <Link
                       href="/forms/production"
-                      onClick={onMobileClose}
-                      className={`block px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                        pathname === "/forms/production"
-                          ? "bg-slate-800 text-cyan-400 font-bold"
+                      onClick={() => handleLinkClick("/forms/production")}
+                      className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        currentPath === "/forms/production"
+                          ? "bg-emerald-600/30 text-emerald-300 font-bold"
                           : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                       }`}
                     >
@@ -167,10 +301,10 @@ export function Sidebar({
                     </Link>
                     <Link
                       href="/forms/production/daily-report"
-                      onClick={onMobileClose}
-                      className={`block px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                        pathname.startsWith("/forms/production/daily-report")
-                          ? "bg-slate-800 text-cyan-400 font-bold"
+                      onClick={() => handleLinkClick("/forms/production/daily-report")}
+                      className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        currentPath.startsWith("/forms/production/daily-report")
+                          ? "bg-emerald-600/30 text-emerald-300 font-bold"
                           : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                       }`}
                     >
@@ -178,10 +312,10 @@ export function Sidebar({
                     </Link>
                     <Link
                       href="/forms/production/handover/new"
-                      onClick={onMobileClose}
-                      className={`block px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                        pathname.startsWith("/forms/production/handover")
-                          ? "bg-slate-800 text-cyan-400 font-bold"
+                      onClick={() => handleLinkClick("/forms/production/handover/new")}
+                      className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        currentPath.startsWith("/forms/production/handover")
+                          ? "bg-emerald-600/30 text-emerald-300 font-bold"
                           : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                       }`}
                     >
@@ -189,10 +323,10 @@ export function Sidebar({
                     </Link>
                     <Link
                       href="/forms/production/stock"
-                      onClick={onMobileClose}
-                      className={`block px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                        pathname.startsWith("/forms/production/stock")
-                          ? "bg-slate-800 text-cyan-400 font-bold"
+                      onClick={() => handleLinkClick("/forms/production/stock")}
+                      className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        currentPath.startsWith("/forms/production/stock")
+                          ? "bg-emerald-600/30 text-emerald-300 font-bold"
                           : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                       }`}
                     >
@@ -203,10 +337,14 @@ export function Sidebar({
               </>
             ) : (
               <Link
-                href="/forms/production"
-                onClick={onMobileClose}
-                className="flex justify-center py-2.5 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white"
-                title="Production"
+                href="/forms/dashboard"
+                onClick={() => handleLinkClick("/forms/dashboard")}
+                className={`flex justify-center py-2.5 rounded-xl transition ${
+                  currentPath.startsWith("/forms/production") || currentPath === "/forms/dashboard"
+                    ? "bg-emerald-600 text-white"
+                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`}
+                title="Production Dashboard"
               >
                 <Factory className="h-5 w-5" />
               </Link>
@@ -214,29 +352,65 @@ export function Sidebar({
           </div>
         )}
 
-        {/* Warehouse & Logistics Accordion */}
+        {/* 3. Warehouse & Logistics Accordion (Split-Click) */}
         {showWarehouse && (
           <div>
             {!isCollapsed ? (
               <>
-                <button
-                  onClick={() => toggleSection("warehouse")}
-                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-semibold text-slate-300 hover:bg-slate-800/80 hover:text-white transition-colors"
+                <div
+                  className={`flex items-center justify-between rounded-xl transition-all ${
+                    currentPath.startsWith("/forms/warehouse")
+                      ? "bg-slate-800/90 text-white"
+                      : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
+                  }`}
                 >
-                  <div className="flex items-center gap-3">
-                    <Warehouse className="h-5 w-5 shrink-0" />
-                    <span>Warehouse & Logistics</span>
-                  </div>
-                  {openSections.warehouse ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                </button>
+                  <Link
+                    href="/forms/warehouse/overview"
+                    onClick={() => handleLinkClick("/forms/warehouse/overview")}
+                    className="flex-1 flex items-center gap-3 px-3 py-2.5 text-sm font-semibold min-w-0"
+                    title="Warehouse Dashboard"
+                  >
+                    <Warehouse className="h-5 w-5 shrink-0 text-amber-400" />
+                    <span className="truncate">Warehouse & Logistics</span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      toggleSection("warehouse")
+                    }}
+                    className="p-2.5 text-slate-400 hover:text-white transition-colors"
+                    aria-label="Toggle Warehouse submenu"
+                  >
+                    {openSections.warehouse ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </button>
+                </div>
+
                 {openSections.warehouse && (
-                  <div className="ml-8 mt-1 space-y-1">
+                  <div className="ml-7 mt-1 space-y-1 border-l-2 border-slate-800 pl-2">
+                    {/* Dashboard at the very first position */}
+                    <Link
+                      href="/forms/warehouse/overview"
+                      onClick={() => handleLinkClick("/forms/warehouse/overview")}
+                      className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        currentPath === "/forms/warehouse/overview"
+                          ? "bg-amber-600/30 text-amber-300 font-bold"
+                          : "text-slate-400 hover:text-white hover:bg-slate-800/50"
+                      }`}
+                    >
+                      Dashboard
+                    </Link>
                     <Link
                       href="/forms/warehouse/dashboard"
-                      onClick={onMobileClose}
-                      className={`block px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                        pathname === "/forms/warehouse/dashboard"
-                          ? "bg-slate-800 text-cyan-400 font-bold"
+                      onClick={() => handleLinkClick("/forms/warehouse/dashboard")}
+                      className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        currentPath === "/forms/warehouse/dashboard"
+                          ? "bg-amber-600/30 text-amber-300 font-bold"
                           : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                       }`}
                     >
@@ -244,10 +418,10 @@ export function Sidebar({
                     </Link>
                     <Link
                       href="/forms/warehouse/distribution"
-                      onClick={onMobileClose}
-                      className={`block px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                        pathname.startsWith("/forms/warehouse/distribution")
-                          ? "bg-slate-800 text-cyan-400 font-bold"
+                      onClick={() => handleLinkClick("/forms/warehouse/distribution")}
+                      className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        currentPath.startsWith("/forms/warehouse/distribution")
+                          ? "bg-amber-600/30 text-amber-300 font-bold"
                           : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                       }`}
                     >
@@ -255,10 +429,10 @@ export function Sidebar({
                     </Link>
                     <Link
                       href="/forms/warehouse/gatepass"
-                      onClick={onMobileClose}
-                      className={`block px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                        pathname === "/forms/warehouse/gatepass" || (pathname.startsWith("/forms/warehouse/gatepass") && !pathname.includes("/security"))
-                          ? "bg-slate-800 text-cyan-400 font-bold"
+                      onClick={() => handleLinkClick("/forms/warehouse/gatepass")}
+                      className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        currentPath === "/forms/warehouse/gatepass" || (currentPath.startsWith("/forms/warehouse/gatepass") && !currentPath.includes("/security"))
+                          ? "bg-amber-600/30 text-amber-300 font-bold"
                           : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                       }`}
                     >
@@ -266,10 +440,10 @@ export function Sidebar({
                     </Link>
                     <Link
                       href="/forms/warehouse/gatepass/security"
-                      onClick={onMobileClose}
-                      className={`block px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                        pathname.startsWith("/forms/warehouse/gatepass/security")
-                          ? "bg-slate-800 text-cyan-400 font-bold"
+                      onClick={() => handleLinkClick("/forms/warehouse/gatepass/security")}
+                      className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        currentPath.startsWith("/forms/warehouse/gatepass/security")
+                          ? "bg-amber-600/30 text-amber-300 font-bold"
                           : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                       }`}
                     >
@@ -277,10 +451,10 @@ export function Sidebar({
                     </Link>
                     <Link
                       href="/forms/warehouse/reports/raw-material"
-                      onClick={onMobileClose}
-                      className={`block px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                        pathname.startsWith("/forms/warehouse/reports/raw-material")
-                          ? "bg-slate-800 text-cyan-400 font-bold"
+                      onClick={() => handleLinkClick("/forms/warehouse/reports/raw-material")}
+                      className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        currentPath.startsWith("/forms/warehouse/reports/raw-material")
+                          ? "bg-amber-600/30 text-amber-300 font-bold"
                           : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                       }`}
                     >
@@ -288,10 +462,10 @@ export function Sidebar({
                     </Link>
                     <Link
                       href="/forms/warehouse/quarantine"
-                      onClick={onMobileClose}
-                      className={`block px-3 py-2 rounded-lg text-xs font-semibold transition-colors ${
-                        pathname.startsWith("/forms/warehouse/quarantine")
-                          ? "bg-slate-800 text-cyan-400 font-bold"
+                      onClick={() => handleLinkClick("/forms/warehouse/quarantine")}
+                      className={`block px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${
+                        currentPath.startsWith("/forms/warehouse/quarantine")
+                          ? "bg-amber-600/30 text-amber-300 font-bold"
                           : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                       }`}
                     >
@@ -302,9 +476,13 @@ export function Sidebar({
               </>
             ) : (
               <Link
-                href="/forms/warehouse/dashboard"
-                onClick={onMobileClose}
-                className="flex justify-center py-2.5 rounded-xl text-slate-300 hover:bg-slate-800 hover:text-white"
+                href="/forms/warehouse/overview"
+                onClick={() => handleLinkClick("/forms/warehouse/overview")}
+                className={`flex justify-center py-2.5 rounded-xl transition ${
+                  currentPath.startsWith("/forms/warehouse")
+                    ? "bg-amber-600 text-white"
+                    : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                }`}
                 title="Warehouse & Logistics"
               >
                 <Warehouse className="h-5 w-5" />
@@ -313,15 +491,15 @@ export function Sidebar({
           </div>
         )}
 
-        <div className="my-1 border-t border-slate-800/80"></div>
+        <div className="my-2 border-t border-slate-800/80"></div>
 
         {/* Administration: Users (SuperAdmin only) */}
         {isSuperAdmin && (
           <Link
             href="/users"
-            onClick={onMobileClose}
+            onClick={() => handleLinkClick("/users")}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-              pathname.startsWith("/users")
+              currentPath.startsWith("/users")
                 ? "bg-cyan-600 text-white shadow-sm"
                 : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
             }`}
@@ -335,9 +513,9 @@ export function Sidebar({
         {/* Settings (All users) */}
         <Link
           href="/settings"
-          onClick={onMobileClose}
+          onClick={() => handleLinkClick("/settings")}
           className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-            pathname.startsWith("/settings")
+            currentPath.startsWith("/settings")
               ? "bg-cyan-600 text-white shadow-sm"
               : "text-slate-300 hover:bg-slate-800/80 hover:text-white"
           }`}

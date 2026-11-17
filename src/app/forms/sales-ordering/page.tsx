@@ -5,6 +5,8 @@ import { redirect } from "next/navigation"
 import { AlertOctagon, ArrowRight, CheckCircle2, FileClock, ShieldAlert, Sparkles, Users } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { OrderProgressChart, type ProgressMetrics } from "@/components/sales-ordering/OrderProgressChart"
+import { LiveStockOverview } from "@/components/sales-ordering/LiveStockOverview"
+import { getLiveStockOverview } from "@/lib/sales-ordering/stock-service"
 import { canAccessSalesOrderingTab, firstSalesOrderingPath, getSalesOrderingAccess } from "@/lib/sales-ordering/access"
 
 export default async function SalesOrderingDashboard() {
@@ -13,7 +15,7 @@ export default async function SalesOrderingDashboard() {
   if (!canAccessSalesOrderingTab(access, "dashboard")) redirect(firstSalesOrderingPath(access))
   const canUseIntake = canAccessSalesOrderingTab(access, "intake")
 
-  const [customers, reviewCount, totalIntakes, approvedIntakes, salesOrders, creditCases] = await Promise.all([
+  const [customers, reviewCount, totalIntakes, approvedIntakes, salesOrders, creditCases, stockData] = await Promise.all([
     prisma.customer.count(),
     prisma.salesDocumentIntake.count({ where: { status: "NEEDS_REVIEW" } }),
     prisma.salesDocumentIntake.count(),
@@ -22,6 +24,7 @@ export default async function SalesOrderingDashboard() {
     prisma.creditCheckCase.findMany({
       orderBy: { createdAt: "desc" },
     }),
+    getLiveStockOverview(),
   ])
 
   const rejectedCases = creditCases.filter(
@@ -76,6 +79,9 @@ export default async function SalesOrderingDashboard() {
           )}
         </div>
       </section>
+
+      {/* LIVE FINISHED GOODS STOCK OVERVIEW (PRODUCTION & WAREHOUSE BY SKU) */}
+      <LiveStockOverview stockData={stockData} />
 
       {/* REJECTION WARNING BANNER (MINIMIZED & COLLAPSIBLE) */}
       {rejectedCases.length > 0 && (

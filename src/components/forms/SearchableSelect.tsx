@@ -46,7 +46,7 @@ export function SearchableSelect({
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border-2 border-black rounded shadow-lg max-h-60 overflow-y-auto">
+        <div className="absolute left-0 top-full z-[100] w-full mt-1 bg-white border-2 border-black rounded-lg shadow-2xl max-h-64 overflow-y-auto">
           <div className="sticky top-0 bg-white p-2 border-b-2 border-gray-100 z-10">
             <div className="relative">
               <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />

@@ -26,6 +26,7 @@ type DistributionOrderRow = {
   destination: string
   distributionMethod: string
   status: string
+  customer?: { id: string; customerCode?: string | null; legalName: string; tradingName?: string | null } | null
   trackingEvents?: Array<{ eventType: string }>
 }
 
@@ -101,6 +102,8 @@ export function DistributionClient({ distributionOrders }: { distributionOrders:
       const lowerSearch = searchTerm.toLowerCase()
       result = result.filter(doOrder =>
         (doOrder.doNumber && doOrder.doNumber.toLowerCase().includes(lowerSearch)) ||
+        (doOrder.customer?.legalName && doOrder.customer.legalName.toLowerCase().includes(lowerSearch)) ||
+        (doOrder.customer?.customerCode && doOrder.customer.customerCode.toLowerCase().includes(lowerSearch)) ||
         (doOrder.destination && doOrder.destination.toLowerCase().includes(lowerSearch)) ||
         (doOrder.distributionMethod && doOrder.distributionMethod.toLowerCase().includes(lowerSearch))
       )
@@ -109,6 +112,7 @@ export function DistributionClient({ distributionOrders }: { distributionOrders:
     // Sort
     result.sort((a, b) => {
       const sortable = (row: DistributionOrderRow) => {
+        if (sortField === "customer") return row.customer?.legalName || ""
         if (sortField === "distributionDate" || sortField === "createdAt") return new Date(row[sortField]).getTime()
         if (sortField === "doNumber") return row.doNumber
         if (sortField === "destination") return row.destination
@@ -230,7 +234,7 @@ export function DistributionClient({ distributionOrders }: { distributionOrders:
             <input
               type="search"
               className="w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-4 text-xs font-semibold text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
-              placeholder="Search DO number or destination..."
+              placeholder="Search DO number, customer, or destination..."
               value={searchTerm}
               onChange={e => {
                 setSearchTerm(e.target.value)
@@ -252,6 +256,16 @@ export function DistributionClient({ distributionOrders }: { distributionOrders:
                 >
                   <div className="flex items-center gap-1">
                     DO Number
+                    <ArrowUpDown className="h-3 w-3 text-slate-400" />
+                  </div>
+                </th>
+                <th
+                  scope="col"
+                  className="px-5 py-3.5 cursor-pointer hover:bg-slate-100 transition"
+                  onClick={() => handleSort("customer")}
+                >
+                  <div className="flex items-center gap-1">
+                    Customer
                     <ArrowUpDown className="h-3 w-3 text-slate-400" />
                   </div>
                 </th>
@@ -283,7 +297,7 @@ export function DistributionClient({ distributionOrders }: { distributionOrders:
             <tbody className="divide-y divide-slate-100 text-slate-800">
               {paginatedDOs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-14 text-center">
+                  <td colSpan={7} className="px-6 py-14 text-center">
                     <Package className="mx-auto mb-2.5 h-9 w-9 text-slate-300" />
                     <p className="font-bold text-slate-700">No Distribution Orders found.</p>
                     <p className="mt-1 text-xs text-slate-400">
@@ -322,13 +336,31 @@ export function DistributionClient({ distributionOrders }: { distributionOrders:
                         </div>
                       </td>
 
+                      {/* Customer Name */}
+                      <td className="px-5 py-3.5">
+                        {doOrder.customer ? (
+                          <div className="max-w-[220px]">
+                            <p className="font-black text-slate-900 text-xs sm:text-sm leading-tight truncate" title={doOrder.customer.legalName}>
+                              {doOrder.customer.legalName}
+                            </p>
+                            {doOrder.customer.customerCode && (
+                              <span className="font-mono text-[10px] font-bold text-slate-500">
+                                {doOrder.customer.customerCode}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">Direct / Ad-hoc</span>
+                        )}
+                      </td>
+
                       {/* Distribution Date */}
-                      <td className="px-5 py-3.5 text-slate-600 font-medium tabular-nums">
+                      <td className="px-5 py-3.5 text-slate-600 font-medium tabular-nums whitespace-nowrap">
                         {new Date(doOrder.distributionDate).toLocaleDateString("en-GB")}
                       </td>
 
                       {/* Destination */}
-                      <td className="px-5 py-3.5 font-bold text-slate-900">
+                      <td className="px-5 py-3.5 font-bold text-slate-900 text-xs sm:text-sm">
                         {doOrder.destination}
                       </td>
 
@@ -433,9 +465,17 @@ export function DistributionClient({ distributionOrders }: { distributionOrders:
                   </div>
                 </div>
 
-                <div className="mt-2.5 border-t border-slate-100 pt-2 text-xs">
-                  <p className="font-bold text-slate-900">{doOrder.destination}</p>
-                  <p className="text-slate-500">{doOrder.distributionMethod}</p>
+                <div className="mt-2.5 border-t border-slate-100 pt-2 text-xs space-y-1">
+                  {doOrder.customer && (
+                    <div className="flex items-center justify-between">
+                      <p className="font-black text-slate-900">{doOrder.customer.legalName}</p>
+                      {doOrder.customer.customerCode && (
+                        <span className="font-mono text-[10px] font-bold text-slate-500">{doOrder.customer.customerCode}</span>
+                      )}
+                    </div>
+                  )}
+                  <p className="font-medium text-slate-700">{doOrder.destination}</p>
+                  <p className="text-slate-500 text-[11px]">{doOrder.distributionMethod}</p>
                 </div>
 
                 <div className="mt-3 grid grid-cols-3 gap-1.5">

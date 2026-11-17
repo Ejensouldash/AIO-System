@@ -41,7 +41,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     }
 
     const today = new Date().toISOString().slice(0, 10).replaceAll("-", "")
-    const internalSoNo = `SO-DRAFT-${today}-${id.slice(0, 6).toUpperCase()}`
+    const internalSoNo = `SO-${today}-${id.slice(0, 6).toUpperCase()}`
     const billing = customer.addresses.find(address => address.isDefaultBilling) || customer.addresses[0]
 
     const salesOrder = await prisma.$transaction(async tx => {
@@ -50,7 +50,8 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
           internalSoNo,
           sourceDocumentId: id,
           customerId,
-          status: "DRAFT",
+          status: "SUBMITTED_TO_WAREHOUSE",
+          submittedToWarehouseAt: new Date(),
           documentType: document.documentType,
           customerDocumentNo: document.documentNumber || null,
           poNumber: document.poNumber || null,

@@ -5,23 +5,28 @@ import { CustomerMasterImport } from "@/components/sales-ordering/CustomerMaster
 import { SalesOrderingPagination } from "@/components/sales-ordering/Pagination"
 import { CustomerPageTabs } from "@/components/sales-ordering/CustomerPageTabs"
 import { CustomerPricingButton } from "@/components/sales-ordering/CustomerPricingButton"
-import { SkuPricingSection } from "@/components/sales-ordering/SkuPricingSection"
 import { getMasterPricesAction } from "@/app/actions/pricing"
 import { canAccessSalesOrderingTab, canManageSalesOrderingCustomers, firstSalesOrderingPath, getSalesOrderingAccess } from "@/lib/sales-ordering/access"
 import { redirect } from "next/navigation"
 
 const PAGE_SIZE = 10
 
-export default async function CustomersPage({ searchParams }: { searchParams: Promise<{ q?: string; page?: string }> }) {
+export default async function CustomersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; page?: string; tab?: string }>
+}) {
   const access = await getSalesOrderingAccess()
   if (!access) redirect("/dashboard")
   if (!canAccessSalesOrderingTab(access, "customers")) redirect(firstSalesOrderingPath(access))
   
-  const { q = "", page: rawPage } = await searchParams
+  const { q = "", page: rawPage, tab = "CUSTOMERS" } = (await searchParams) || {}
   const parsedPage = Number(rawPage)
   const page = Number.isFinite(parsedPage) && parsedPage > 0 ? Math.floor(parsedPage) : 1
   const where = q ? { OR: [{ customerCode: { contains: q, mode: "insensitive" as const } }, { legalName: { contains: q, mode: "insensitive" as const } }, { sageCustomerId: { contains: q, mode: "insensitive" as const } }] } : undefined
-  
+  const isPricingTab = tab === "PRICING"
+
+  // Optimization: Do NOT eagerly query 500 customers + all skuPrices on initial render unless user requested tab=PRICING
   const [total, customers, rawRegistrations, masterPrices, allCustomersForPricing] = await Promise.all([
     prisma.customer.count({ where }),
     prisma.customer.findMany({
@@ -44,17 +49,19 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
       }
     }),
     getMasterPricesAction(),
-    prisma.customer.findMany({
-      select: {
-        id: true,
-        customerCode: true,
-        legalName: true,
-        tradingName: true,
-        skuPrices: true,
-      },
-      orderBy: { legalName: "asc" },
-      take: 500,
-    }),
+    isPricingTab
+      ? prisma.customer.findMany({
+          select: {
+            id: true,
+            customerCode: true,
+            legalName: true,
+            tradingName: true,
+            skuPrices: true,
+          },
+          orderBy: { legalName: "asc" },
+          take: 500,
+        })
+      : Promise.resolve([]),
   ])
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
@@ -146,18 +153,13 @@ export default async function CustomersPage({ searchParams }: { searchParams: Pr
     </div>
   )
 
-  const pricingContent = (
-    <SkuPricingSection
-      masterPrices={masterPrices}
-      customers={pricingCustomers}
-    />
-  )
-
   return (
     <CustomerPageTabs
       customersContent={customersContent}
       registrations={registrations}
-      pricingContent={pricingContent}
+      masterPrices={masterPrices}
+      initialPricingCustomers={pricingCustomers}
+      initialTab={isPricingTab ? "PRICING" : "CUSTOMERS"}
     />
   )
 }
