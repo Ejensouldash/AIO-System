@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server"
 import * as xlsx from "xlsx"
 import { Prisma } from "@prisma/client"
+import { randomUUID } from "crypto"
 import { prisma } from "@/lib/prisma"
 import { canAccessSalesOrderingTab, canManageSalesOrderingCustomers, getSalesOrderingAccess } from "@/lib/sales-ordering/access"
 
@@ -60,8 +61,20 @@ export async function POST(request: Request) {
       if (id) addressById.set(id, row)
     }
 
-    const rows = masterRows.filter(row => value(row, "Customer ID"))
-    if (!rows.length) return NextResponse.json({ error: "Tiada rekod Customer ID ditemui dalam tab Master." }, { status: 400 })
+    const rawRows = masterRows.filter(row => value(row, "Customer ID"))
+    if (!rawRows.length) return NextResponse.json({ error: "Tiada rekod Customer ID ditemui dalam tab Master." }, { status: 400 })
+
+    // Deduplicate within the file keeping the latest entry to prevent PostgreSQL ON CONFLICT row locking collision
+    const uniqueMap = new Map<string, Row>()
+    for (const row of rawRows) {
+      const code = value(row, "Customer ID")
+      if (code) uniqueMap.set(code, row)
+    }
+    const rows = Array.from(uniqueMap.values())
+
+    // Fetch existing customer codes in 1 quick query upfront
+    const existingRecords = await prisma.customer.findMany({ select: { customerCode: true } })
+    const existingSet = new Set(existingRecords.map(c => c.customerCode))
 
     let created = 0
     let updated = 0
@@ -70,108 +83,157 @@ export async function POST(request: Request) {
 
     for (let start = 0; start < rows.length; start += batchSize) {
       const batch = rows.slice(start, start + batchSize)
-      await prisma.$transaction(async tx => {
-        for (const row of batch) {
-          const customerCode = value(row, "Customer ID")
-          const sourceAddress: Row = addressById.get(customerCode) || {}
-          const legalName = cleanOptional(value(row, "Description(1)")) || customerCode
-          const creditTermsRaw = cleanOptional(value(row, "CT") || value(sourceAddress, "CT"))
-          const credit = parseCreditTerms(creditTermsRaw || "")
-          const existing = await tx.customer.findUnique({ where: { customerCode }, select: { id: true } })
-          const status = legalName === customerCode ? "NEEDS_REVIEW" : "READY"
-          if (status === "NEEDS_REVIEW") needsReview++
 
-          const customer = await tx.customer.upsert({
-            where: { customerCode },
-            create: {
-              customerCode,
-              sageCustomerId: cleanOptional(value(row, "SageID")),
-              legalName,
-              tradingName: cleanOptional(value(row, "Description(2)")),
-              pic: cleanOptional(value(row, "PIC") || value(sourceAddress, "PIC")),
-              email: cleanOptional(value(row, "Email Address (only 1 is required for eInvoice)")),
-              phonePrimary: cleanOptional(value(row, "Phone No.(1) - required format -no dash, no spacing,no extension code or text (example '017396624)") || value(sourceAddress, "Phone No.(1)")),
-              phoneSecondary: cleanOptional(value(row, "Phone No.(2)") || value(sourceAddress, "Phone No.(2)")),
-              customerType: cleanOptional(value(row, "NewType") || value(row, "Type") || value(sourceAddress, "Type")),
-              customerSubtype: cleanOptional(value(row, "Subtype") || value(sourceAddress, "Subtype")),
-              categoryCode: cleanOptional(value(row, "Category Code")),
-              zone: cleanOptional(value(sourceAddress, "Zone")),
-              region: cleanOptional(value(row, "Region") || value(sourceAddress, "State2")),
-              creditTermsRaw,
-              creditTermDays: credit.days,
-              paymentPolicy: credit.policy,
-              salesRep1: cleanOptional(value(row, "SALES REP 1")),
-              salesRep2: cleanOptional(value(row, "SALES REP 2")),
-              companyRegistrationNo: cleanOptional(value(row, "Company Registration No (New)/NRIC/Passport/Army No")),
-              tinNo: cleanOptional(value(row, "TIN Number")),
-              sstNo: cleanOptional(value(row, "SST Number (If applicable)")),
-              importStatus: status,
-              sourceData: JSON.parse(JSON.stringify(row)) as Prisma.InputJsonValue,
-            },
-            update: {
-              sageCustomerId: cleanOptional(value(row, "SageID")),
-              legalName,
-              tradingName: cleanOptional(value(row, "Description(2)")),
-              pic: cleanOptional(value(row, "PIC") || value(sourceAddress, "PIC")),
-              email: cleanOptional(value(row, "Email Address (only 1 is required for eInvoice)")),
-              phonePrimary: cleanOptional(value(row, "Phone No.(1) - required format -no dash, no spacing,no extension code or text (example '017396624)") || value(sourceAddress, "Phone No.(1)")),
-              phoneSecondary: cleanOptional(value(row, "Phone No.(2)") || value(sourceAddress, "Phone No.(2)")),
-              customerType: cleanOptional(value(row, "NewType") || value(row, "Type") || value(sourceAddress, "Type")),
-              customerSubtype: cleanOptional(value(row, "Subtype") || value(sourceAddress, "Subtype")),
-              categoryCode: cleanOptional(value(row, "Category Code")),
-              zone: cleanOptional(value(sourceAddress, "Zone")),
-              region: cleanOptional(value(row, "Region") || value(sourceAddress, "State2")),
-              creditTermsRaw,
-              creditTermDays: credit.days,
-              paymentPolicy: credit.policy,
-              salesRep1: cleanOptional(value(row, "SALES REP 1")),
-              salesRep2: cleanOptional(value(row, "SALES REP 2")),
-              companyRegistrationNo: cleanOptional(value(row, "Company Registration No (New)/NRIC/Passport/Army No")),
-              tinNo: cleanOptional(value(row, "TIN Number")),
-              sstNo: cleanOptional(value(row, "SST Number (If applicable)")),
-              importStatus: status,
-              sourceData: JSON.parse(JSON.stringify(row)) as Prisma.InputJsonValue,
-            },
-          })
+      const customerValues = batch.map(row => {
+        const customerCode = value(row, "Customer ID")
+        const sourceAddress: Row = addressById.get(customerCode) || {}
+        const legalName = cleanOptional(value(row, "Description(1)")) || customerCode
+        const creditTermsRaw = cleanOptional(value(row, "CT") || value(sourceAddress, "CT"))
+        const credit = parseCreditTerms(creditTermsRaw || "")
+        const status = legalName === customerCode ? "NEEDS_REVIEW" : "READY"
+        if (status === "NEEDS_REVIEW") needsReview++
 
-          const fullAddress = cleanOptional(value(row, "Full Address") || value(sourceAddress, "Full Address"))
-          await tx.customerAddress.upsert({
-            where: { customerId_label: { customerId: customer.id, label: "Master Address" } },
-            create: {
-              customerId: customer.id,
-              label: "Master Address",
-              addressType: "BILLING",
-              attentionTo: customer.pic,
-              phone: customer.phonePrimary,
-              addressLine1: cleanOptional(value(row, "Address Line 1 (30 char)") || value(sourceAddress, "Address")),
-              addressLine2: cleanOptional(value(row, "Address Line 2 (30 char)") || value(sourceAddress, "Street")),
-              addressLine3: cleanOptional(value(row, "Address Line 3 (30 char)") || value(sourceAddress, "City")),
-              city: cleanOptional(value(row, "City")),
-              state: cleanOptional(value(sourceAddress, "State2")),
-              postcode: cleanOptional(value(row, "Postal Code")),
-              country: cleanOptional(value(row, "Country")) || "MALAYSIA",
-              fullAddress,
-              isDefaultBilling: true,
-              isDefaultDelivery: true,
-              sourceRowReference: customerCode,
-            },
-            update: {
-              attentionTo: customer.pic,
-              phone: customer.phonePrimary,
-              addressLine1: cleanOptional(value(row, "Address Line 1 (30 char)") || value(sourceAddress, "Address")),
-              addressLine2: cleanOptional(value(row, "Address Line 2 (30 char)") || value(sourceAddress, "Street")),
-              addressLine3: cleanOptional(value(row, "Address Line 3 (30 char)") || value(sourceAddress, "City")),
-              city: cleanOptional(value(row, "City")),
-              state: cleanOptional(value(sourceAddress, "State2")),
-              postcode: cleanOptional(value(row, "Postal Code")),
-              country: cleanOptional(value(row, "Country")) || "MALAYSIA",
-              fullAddress,
-            },
-          })
-          if (existing) updated++
-          else created++
+        if (existingSet.has(customerCode)) {
+          updated++
+        } else {
+          created++
+          existingSet.add(customerCode)
         }
-      }, { timeout: 60000 })
+
+        const id = randomUUID()
+
+        return {
+          row,
+          customerCode,
+          sourceAddress,
+          sql: Prisma.sql`(
+            ${id},
+            ${customerCode},
+            ${cleanOptional(value(row, "SageID"))},
+            ${legalName},
+            ${cleanOptional(value(row, "Description(2)"))},
+            ${cleanOptional(value(row, "PIC") || value(sourceAddress, "PIC"))},
+            ${cleanOptional(value(row, "Email Address (only 1 is required for eInvoice)"))},
+            ${cleanOptional(value(row, "Phone No.(1) - required format -no dash, no spacing,no extension code or text (example '017396624)") || value(sourceAddress, "Phone No.(1)"))},
+            ${cleanOptional(value(row, "Phone No.(2)") || value(sourceAddress, "Phone No.(2)"))},
+            ${cleanOptional(value(row, "NewType") || value(row, "Type") || value(sourceAddress, "Type"))},
+            ${cleanOptional(value(row, "Subtype") || value(sourceAddress, "Subtype"))},
+            ${cleanOptional(value(row, "Category Code"))},
+            ${cleanOptional(value(sourceAddress, "Zone"))},
+            ${cleanOptional(value(row, "Region") || value(sourceAddress, "State2"))},
+            ${creditTermsRaw},
+            ${credit.days},
+            ${credit.policy},
+            ${cleanOptional(value(row, "SALES REP 1"))},
+            ${cleanOptional(value(row, "SALES REP 2"))},
+            ${cleanOptional(value(row, "Company Registration No (New)/NRIC/Passport/Army No"))},
+            ${cleanOptional(value(row, "TIN Number"))},
+            ${cleanOptional(value(row, "SST Number (If applicable)"))},
+            ${status},
+            ${JSON.stringify(row)}::jsonb,
+            NOW(),
+            NOW()
+          )`
+        }
+      })
+
+      // Multi-row high-performance PostgreSQL upsert (1 query per 100 rows, avoids transaction timeout)
+      const upserted: Array<{ id: string, customerCode: string }> = await prisma.$queryRaw`
+        INSERT INTO "Customer" (
+          "id", "customerCode", "sageCustomerId", "legalName", "tradingName", "pic", "email",
+          "phonePrimary", "phoneSecondary", "customerType", "customerSubtype", "categoryCode",
+          "zone", "region", "creditTermsRaw", "creditTermDays", "paymentPolicy", "salesRep1", "salesRep2",
+          "companyRegistrationNo", "tinNo", "sstNo", "importStatus", "sourceData", "createdAt", "updatedAt"
+        )
+        VALUES ${Prisma.join(customerValues.map(c => c.sql))}
+        ON CONFLICT ("customerCode") DO UPDATE SET
+          "sageCustomerId" = EXCLUDED."sageCustomerId",
+          "legalName" = EXCLUDED."legalName",
+          "tradingName" = EXCLUDED."tradingName",
+          "pic" = EXCLUDED."pic",
+          "email" = EXCLUDED."email",
+          "phonePrimary" = EXCLUDED."phonePrimary",
+          "phoneSecondary" = EXCLUDED."phoneSecondary",
+          "customerType" = EXCLUDED."customerType",
+          "customerSubtype" = EXCLUDED."customerSubtype",
+          "categoryCode" = EXCLUDED."categoryCode",
+          "zone" = EXCLUDED."zone",
+          "region" = EXCLUDED."region",
+          "creditTermsRaw" = EXCLUDED."creditTermsRaw",
+          "creditTermDays" = EXCLUDED."creditTermDays",
+          "paymentPolicy" = EXCLUDED."paymentPolicy",
+          "salesRep1" = EXCLUDED."salesRep1",
+          "salesRep2" = EXCLUDED."salesRep2",
+          "companyRegistrationNo" = EXCLUDED."companyRegistrationNo",
+          "tinNo" = EXCLUDED."tinNo",
+          "sstNo" = EXCLUDED."sstNo",
+          "importStatus" = EXCLUDED."importStatus",
+          "sourceData" = EXCLUDED."sourceData",
+          "updatedAt" = NOW()
+        RETURNING "id", "customerCode"
+      `
+
+      const custIdMap = new Map(upserted.map(c => [c.customerCode, c.id]))
+
+      const addressValues = customerValues.map(({ row, customerCode, sourceAddress }) => {
+        const customerId = custIdMap.get(customerCode)!
+        const addrId = randomUUID()
+        const rawFullAddr = cleanOptional(value(row, "Full Address") || value(sourceAddress, "Full Address"))
+        const fullAddress = rawFullAddr || [
+          cleanOptional(value(row, "Address Line 1 (30 char)") || value(sourceAddress, "Address")),
+          cleanOptional(value(row, "Address Line 2 (30 char)") || value(sourceAddress, "Street")),
+          cleanOptional(value(row, "Address Line 3 (30 char)") || value(sourceAddress, "City")),
+          cleanOptional(value(row, "Postal Code")),
+          cleanOptional(value(row, "City")),
+          cleanOptional(value(sourceAddress, "State2")),
+          cleanOptional(value(row, "Country")) || "MALAYSIA",
+        ].filter(Boolean).join(", ") || null
+
+        return Prisma.sql`(
+          ${addrId},
+          ${customerId},
+          'Master Address',
+          'BILLING',
+          ${cleanOptional(value(row, "PIC") || value(sourceAddress, "PIC"))},
+          ${cleanOptional(value(row, "Phone No.(1) - required format -no dash, no spacing,no extension code or text (example '017396624)") || value(sourceAddress, "Phone No.(1)"))},
+          ${cleanOptional(value(row, "Address Line 1 (30 char)") || value(sourceAddress, "Address"))},
+          ${cleanOptional(value(row, "Address Line 2 (30 char)") || value(sourceAddress, "Street"))},
+          ${cleanOptional(value(row, "Address Line 3 (30 char)") || value(sourceAddress, "City"))},
+          ${cleanOptional(value(row, "City"))},
+          ${cleanOptional(value(sourceAddress, "State2"))},
+          ${cleanOptional(value(row, "Postal Code"))},
+          ${cleanOptional(value(row, "Country")) || "MALAYSIA"},
+          ${fullAddress},
+          true,
+          true,
+          ${customerCode},
+          NOW(),
+          NOW()
+        )`
+      })
+
+      // Multi-row high-performance address upsert
+      await prisma.$executeRaw`
+        INSERT INTO "CustomerAddress" (
+          "id", "customerId", "label", "addressType", "attentionTo", "phone",
+          "addressLine1", "addressLine2", "addressLine3", "city", "state", "postcode",
+          "country", "fullAddress", "isDefaultBilling", "isDefaultDelivery",
+          "sourceRowReference", "createdAt", "updatedAt"
+        )
+        VALUES ${Prisma.join(addressValues)}
+        ON CONFLICT ("customerId", "label") DO UPDATE SET
+          "attentionTo" = EXCLUDED."attentionTo",
+          "phone" = EXCLUDED."phone",
+          "addressLine1" = EXCLUDED."addressLine1",
+          "addressLine2" = EXCLUDED."addressLine2",
+          "addressLine3" = EXCLUDED."addressLine3",
+          "city" = EXCLUDED."city",
+          "state" = EXCLUDED."state",
+          "postcode" = EXCLUDED."postcode",
+          "country" = EXCLUDED."country",
+          "fullAddress" = EXCLUDED."fullAddress",
+          "updatedAt" = NOW()
+      `
     }
 
     await prisma.auditLog.create({
@@ -189,4 +251,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Customer Master import failed." }, { status: 500 })
   }
 }
-
