@@ -121,7 +121,7 @@ export default async function CustomersPage({
                 <tr key={customer.id} className="align-top hover:bg-slate-50">
                   <td className="px-5 py-4">
                     <p className="font-black text-slate-900">{customer.legalName}</p>
-                    <p className="mt-1 text-xs text-slate-500">{customer.customerCode} · {customer.sageCustomerId || "No Sage ID"}</p>
+                    <p className="mt-1 text-xs text-slate-500">{customer.customerCode}{customer.sageCustomerId ? ` · ${customer.sageCustomerId}` : ""}</p>
                   </td>
                   <td className="px-5 py-4 text-slate-600">
                     {customer.customerType || "-"}

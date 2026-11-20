@@ -20,7 +20,7 @@ export function CustomerMasterImport() {
     if (!file) return
     setBusy(true)
     setProgress(0)
-    setStage("Membaca fail Excel...")
+    setStage("Reading Excel file...")
     setError("")
     setMessage("")
     try {
@@ -39,16 +39,16 @@ export function CustomerMasterImport() {
           if (!event.lengthComputable) return
           const uploaded = Math.max(1, Math.round((event.loaded / event.total) * 60))
           setProgress(uploaded)
-          setStage(`Memuat naik fail... ${Math.round((event.loaded / event.total) * 100)}%`)
+          setStage(`Uploading file... ${Math.round((event.loaded / event.total) * 100)}%`)
         }
         request.upload.onload = () => {
           setProgress(75)
-          setStage("Smart Reader: Mengesan lajur, menganalisis alamat & nombor telefon...")
+          setStage("Smart Reader: Detecting columns, analyzing addresses & contact numbers...")
         }
         request.onreadystatechange = () => {
           if (request.readyState !== XMLHttpRequest.HEADERS_RECEIVED) return
           setProgress(90)
-          setStage("Menyimpan & mengemaskini pangkalan data pelanggan...")
+          setStage("Saving & updating customer database...")
         }
         request.onload = () => {
           let payload: {
@@ -67,11 +67,11 @@ export function CustomerMasterImport() {
             /* handled below */
           }
           if (request.status < 200 || request.status >= 300) {
-            reject(new Error(payload.error || "Import gagal"))
+            reject(new Error(payload.error || "Import failed"))
             return
           }
           setProgress(100)
-          setStage("Import selesai!")
+          setStage("Import completed!")
           resolve({
             total: payload.total || 0,
             created: payload.created || 0,
@@ -83,22 +83,21 @@ export function CustomerMasterImport() {
           })
         }
         request.onerror = () =>
-          reject(new Error("Sambungan terputus semasa import. Sila cuba lagi."))
+          reject(new Error("Connection interrupted during import. Please try again."))
         const form = new FormData()
         form.append("file", file)
         request.send(form)
       })
 
-      const sheetsInfo = result.parsedSheets?.length ? ` [Sheet: ${result.parsedSheets.join(", ")}]` : ""
-      const regularInfo = result.regularCount ? `, ${result.regularCount} Pelanggan Tetap (Regular)` : ""
+      const sheetsInfo = result.parsedSheets?.length ? ` [Sheets: ${result.parsedSheets.join(", ")}]` : ""
+      const regularInfo = result.regularCount ? `, ${result.regularCount} Regular Customers` : ""
       setMessage(
-        result.message ||
-        `Berjaya memproses ${result.total.toLocaleString()} pelanggan${sheetsInfo}: ${result.created.toLocaleString()} baharu, ${result.updated.toLocaleString()} dikemaskini${regularInfo}.`
+        `Successfully processed ${result.total.toLocaleString()} customers${sheetsInfo}: ${result.created.toLocaleString()} new, ${result.updated.toLocaleString()} updated${regularInfo}.`
       )
       setFile(null)
       router.refresh()
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Import gagal")
+      setError(cause instanceof Error ? cause.message : "Import failed")
     } finally {
       setBusy(false)
     }
@@ -139,7 +138,7 @@ export function CustomerMasterImport() {
                 </span>
               </div>
               <p className="text-xs text-violet-700 max-w-2xl leading-relaxed">
-                Menyokong pelbagai format Excel secara automatik (termasuk senarai ringkas seperti <strong>Customer List LWI</strong> mahupun <strong>Masterlist 30-kolum</strong>). Mengesan tajuk lajur secara pintar, memecahkan alamat & poskod, serta menjana ID Pelanggan unik secara automatik jika tiada.
+                Automatically supports flexible Excel formats (including simple lists like <strong>Customer List LWI</strong> and full <strong>30-column Masterlists</strong>). Smartly detects headers across sheets, parses addresses & postcodes, and auto-generates unique Customer IDs without manual formatting.
               </p>
             </div>
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center shrink-0">
@@ -156,7 +155,7 @@ export function CustomerMasterImport() {
                 onClick={() => inputRef.current?.click()}
                 className="rounded-xl border border-violet-300 bg-white px-4 py-2.5 text-xs font-black text-violet-800 disabled:opacity-60 hover:bg-violet-50 transition shadow-2xs"
               >
-                {file ? file.name : "Pilih Fail Excel"}
+                {file ? file.name : "Choose Excel File"}
               </button>
               <button
                 type="button"
@@ -165,7 +164,7 @@ export function CustomerMasterImport() {
                 className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-700 px-5 py-2.5 text-xs font-black text-white disabled:bg-violet-300 hover:bg-violet-600 transition shadow-sm cursor-pointer"
               >
                 {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                {busy ? "Memproses..." : "Upload & Sync"}
+                {busy ? "Importing..." : "Upload & Sync"}
               </button>
             </div>
           </div>
