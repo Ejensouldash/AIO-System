@@ -10,6 +10,7 @@ import { TactileButton } from "@/components/ui/TactileButton"
 type Item = { sku: string; description: string; uom: string; plannedQty: number }
 
 const SKU_OPTIONS = [
+  { value: "LWI_500_24", label: "500ML X 24", description: "LWI BLUE 500ML X 24" },
   { value: "p425_24", label: "425ML X 24", description: "BUBBLES O2 Mineral Water 425 ML x 24" },
   { value: "p425_6", label: "425ML X 6", description: "BUBBLES O2 Mineral Water 425 ML x 6" },
   { value: "p800_20", label: "800ML X 20", description: "BUBBLES O2 Mineral Water 800 ML x 20" },

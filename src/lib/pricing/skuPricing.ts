@@ -10,23 +10,25 @@ export interface SkuDefinition {
 }
 
 export const STANDARD_FINISHED_GOOD_SKUS: SkuDefinition[] = [
-  { sku: "p425_24", name: "BUBBLES O2 425 ML x 24", defaultPrice: 24.0, uom: "CTN", unitsPerPack: 24, category: "Mineral Water" },
-  { sku: "p425_6", name: "BUBBLES O2 425 ML x 6", defaultPrice: 7.0, uom: "CTN", unitsPerPack: 6, category: "Mineral Water" },
-  { sku: "p800_12", name: "BUBBLES O2 800 ML x 12", defaultPrice: 21.0, uom: "CTN", unitsPerPack: 12, category: "Mineral Water" },
-  { sku: "p800_20", name: "BUBBLES O2 800 ML x 20", defaultPrice: 35.0, uom: "CTN", unitsPerPack: 20, category: "Mineral Water" },
+  { sku: "LWI_500_24", name: "LWI BLUE 500ML X 24", defaultPrice: 85.0, uom: "CTN", unitsPerPack: 24, category: "Mineral Water" },
 ]
 
 export const SKU_LABEL_MAP: Record<string, string> = {
-  p425_24: "BUBBLES O2 425 ML x 24",
-  p425_6: "BUBBLES O2 425 ML x 6",
-  p800_12: "BUBBLES O2 800 ML x 12",
-  p800_20: "BUBBLES O2 800 ML x 20",
+  LWI_500_24: "LWI BLUE 500ML X 24",
+  lwi_500_24: "LWI BLUE 500ML X 24",
+  p500_24: "LWI BLUE 500ML X 24",
 }
 
 /**
  * Ensures SkuMasterPrice table is seeded with default entries if not yet populated.
  */
 export async function ensureDefaultSkuMasterPrices() {
+  // Deactivate any legacy/obsolete SKUs
+  await prisma.skuMasterPrice.updateMany({
+    where: { sku: { notIn: ["LWI_500_24"] } },
+    data: { isActive: false },
+  })
+
   for (const def of STANDARD_FINISHED_GOOD_SKUS) {
     await prisma.skuMasterPrice.upsert({
       where: { sku: def.sku },
@@ -40,7 +42,11 @@ export async function ensureDefaultSkuMasterPrices() {
         unitsPerPack: def.unitsPerPack || 1,
         isActive: true,
       },
-      update: {}, // keep existing prices if already edited
+      update: {
+        name: def.name,
+        defaultPrice: def.defaultPrice,
+        isActive: true,
+      },
     })
   }
 }

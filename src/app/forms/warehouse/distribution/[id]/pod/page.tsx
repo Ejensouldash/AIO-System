@@ -80,6 +80,8 @@ export default function PrintPODPage({ params }: { params: Promise<{ id: string 
   })
 
   const labels: Record<string, string> = {
+    "LWI_500_24": "LWI BLUE 500ML X 24",
+    "lwi_500_24": "LWI BLUE 500ML X 24",
     "p425_24": "BUBBLES O2 Mineral Water 425 ML x 24",
     "p425_6":  "BUBBLES O2 Mineral Water 425 ML x 6",
     "p800_12": "BUBBLES O2 Mineral Water 800 ML x 12",

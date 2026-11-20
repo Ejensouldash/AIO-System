@@ -170,10 +170,14 @@ export async function createDistributionOrder(data: DOData) {
       }
     })
 
-    revalidatePath("/forms/warehouse/distribution")
-    revalidatePath("/forms/warehouse/overview")
-    revalidatePath("/forms/warehouse/dashboard")
-    revalidatePath("/forms/sales-ordering/orders")
+    try {
+      revalidatePath("/forms/warehouse/distribution")
+      revalidatePath("/forms/warehouse/overview")
+      revalidatePath("/forms/warehouse/dashboard")
+      revalidatePath("/forms/sales-ordering/orders")
+    } catch {
+      // ignore when run outside Next.js request context
+    }
     return { success: true }
   } catch (error: any) {
     console.error("Failed to create DO:", error)

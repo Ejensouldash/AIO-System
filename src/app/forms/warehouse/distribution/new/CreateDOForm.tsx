@@ -19,10 +19,7 @@ const DISTRIBUTION_METHODS = [
 ]
 
 const DEFAULT_SKU_CONFIG = [
-  { sku: "p425_24", name: "BUBBLES O2 425 ML x 24", defaultPrice: 24.0, uom: "CTN" },
-  { sku: "p425_6", name: "BUBBLES O2 425 ML x 6", defaultPrice: 7.0, uom: "CTN" },
-  { sku: "p800_12", name: "BUBBLES O2 800 ML x 12", defaultPrice: 21.0, uom: "CTN" },
-  { sku: "p800_20", name: "BUBBLES O2 800 ML x 20", defaultPrice: 35.0, uom: "CTN" },
+  { sku: "LWI_500_24", name: "LWI BLUE 500ML X 24", defaultPrice: 85.0, uom: "CTN" },
 ]
 
 export type CustomerOption = {

@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 
 export type SkuStockSummary = {
-  skuKey: "p425_24" | "p425_6" | "p800_12" | "p800_20"
+  skuKey: "LWI_500_24" | "p425_24" | "p425_6" | "p800_12" | "p800_20"
   name: string
   shortCode: string
   bottleSize: string
@@ -29,9 +29,10 @@ export type StockOverviewData = {
   lastUpdated: string
 }
 
-export function normalizeSkuKey(raw: string): "p425_24" | "p425_6" | "p800_12" | "p800_20" | null {
+export function normalizeSkuKey(raw: string): "LWI_500_24" | "p425_24" | "p425_6" | "p800_12" | "p800_20" | null {
   if (!raw) return null
   const clean = raw.toLowerCase().replace(/[^a-z0-9]/g, "")
+  if (clean.includes("500") || clean.includes("lwi")) return "LWI_500_24"
   if (clean.includes("425") && clean.includes("24")) return "p425_24"
   if (clean.includes("425") && clean.includes("6")) return "p425_6"
   if (clean.includes("800") && clean.includes("20")) return "p800_20"
@@ -40,6 +41,14 @@ export function normalizeSkuKey(raw: string): "p425_24" | "p425_6" | "p800_12" |
 }
 
 const SKU_METADATA = {
+  LWI_500_24: {
+    skuKey: "LWI_500_24" as const,
+    name: "LWI BLUE 500ML X 24",
+    shortCode: "500ml x 24",
+    bottleSize: "500 ML",
+    packQty: "24 Bottles / Carton",
+    bottlesPerBox: 24,
+  },
   p425_24: {
     skuKey: "p425_24" as const,
     name: "Bubbles O2 Natural Mineral Water 425ml x 24",
@@ -119,7 +128,8 @@ export async function getLiveStockOverview(): Promise<StockOverviewData> {
     productionBatches: Array<{ batchNumber: string; qty: number }>
   }
 
-  const aggregates: Record<"p425_24" | "p425_6" | "p800_12" | "p800_20", SkuAggregator> = {
+  const aggregates: Record<"LWI_500_24" | "p425_24" | "p425_6" | "p800_12" | "p800_20", SkuAggregator> = {
+    LWI_500_24: { warehouseBoxes: 0, productionBoxes: 0, warehouseBatches: [], productionBatches: [] },
     p425_24: { warehouseBoxes: 0, productionBoxes: 0, warehouseBatches: [], productionBatches: [] },
     p425_6: { warehouseBoxes: 0, productionBoxes: 0, warehouseBatches: [], productionBatches: [] },
     p800_20: { warehouseBoxes: 0, productionBoxes: 0, warehouseBatches: [], productionBatches: [] },
@@ -159,8 +169,9 @@ export async function getLiveStockOverview(): Promise<StockOverviewData> {
     }
   }
 
-  // Construct SkuStockSummary for all 4 SKUs
-  const order: Array<"p425_24" | "p425_6" | "p800_20" | "p800_12"> = [
+  // Construct SkuStockSummary for active SKUs
+  const order: Array<"LWI_500_24" | "p425_24" | "p425_6" | "p800_20" | "p800_12"> = [
+    "LWI_500_24",
     "p425_24",
     "p800_20",
     "p800_12",
