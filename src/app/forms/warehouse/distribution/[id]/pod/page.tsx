@@ -503,19 +503,19 @@ export default function PrintPODPage({ params }: { params: Promise<{ id: string 
               gridRow: '1 / 3'
             }}>
               <img
-                src="/assets/BubblesO2_Logo.png"
-                alt="BubblesO2"
-                style={{ height: 52, objectFit: 'contain' }}
+                src="/assets/LWI_Logo.png"
+                alt="LWI Blue"
+                style={{ height: 48, objectFit: 'contain' }}
               />
             </div>
             <div style={{ padding: '8px 12px', borderRight: '1px solid #1a1a2e', textAlign: 'center', fontSize: 9, lineHeight: 1.6 }}>
               <strong>Document Type: Level 4</strong><br />SUPPORTING DOCUMENTATION
             </div>
             <div style={{ padding: '8px 12px', borderRight: '1px solid #1a1a2e', textAlign: 'center', fontSize: 9, lineHeight: 1.6 }}>
-              <strong>Document Title:</strong><br />STOCK TRANSFER FORM
+              <strong>Document Title:</strong><br />DELIVERY ORDER / STOCK TRANSFER
             </div>
             <div style={{ padding: '8px 12px', textAlign: 'center', fontSize: 9, lineHeight: 1.6 }}>
-              <strong>Document Number:</strong><br />BOMSB-LNW-850-002-QR01
+              <strong>Document Number:</strong><br />LWI-LNW-850-001-QR01
             </div>
           </div>
           {/* GMP ISO HEADER - Row 2 */}
@@ -528,14 +528,14 @@ export default function PrintPODPage({ params }: { params: Promise<{ id: string 
               padding: '8px 12px', borderRight: '1px solid #1a1a2e',
               textAlign: 'center', fontSize: 9, lineHeight: 1.6
             }}>
-              Co. No. 201401003259<br />(1079333-K)
+              Co. No. 201901032145<br />(1341475-P)
             </div>
             <div style={{
               padding: '8px 12px', borderRight: '1px solid #1a1a2e',
               textAlign: 'center', fontSize: 9, fontWeight: 700, lineHeight: 1.6
             }}>
               HEAD OF LOGISTICS AND WAREHOUSE<br />
-              BUBBLES O2 MARKETING SDN BHD (BOMSB)
+              LANGKAWI WATER INDUSTRY SDN BHD (LWI)
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ padding: '4px 10px', borderBottom: '1px solid #1a1a2e', fontSize: 9 }}>
@@ -733,7 +733,7 @@ export default function PrintPODPage({ params }: { params: Promise<{ id: string 
               <div className="sig-box">
                 <span className="sig-box-label">Sender Information</span>
                 <div className="sig-stamp-circle">
-                  <span>BUBBLES O2<br/>SDN BHD<br/>STAMP</span>
+                  <span>LWI BLUE<br/>SDN BHD<br/>STAMP</span>
                 </div>
                 <div>
                   <div className="sig-name-line">Name &amp; Signature</div>
@@ -764,7 +764,7 @@ export default function PrintPODPage({ params }: { params: Promise<{ id: string 
 
             {/* Footer */}
             <div className="doc-footer">
-              <span>BOMSB-LNW-850-002-QR01 | Issue 03 | Date: 08/12/2025</span>
+              <span>LWI-LNW-850-001-QR01 | Issue 01 | Date: 20/11/2026</span>
               <span>Generated: {new Date().toLocaleString('en-GB')}</span>
             </div>
 

@@ -43,14 +43,14 @@ export function SmartQrCard({
       </div>
       {!compact && (
         <>
-          <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Scan untuk rekod terkini</p>
+          <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-wider text-slate-400">Scan for live record</p>
           <div className="mt-3 grid grid-cols-2 gap-2 print:hidden">
             <button onClick={copy} className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 px-3 py-2 text-xs font-black text-slate-700 hover:bg-slate-50">
               {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-              {copied ? "Disalin" : "Salin Link"}
+              {copied ? "Copied" : "Copy Link"}
             </button>
             <a href={path} className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white">
-              Buka <ExternalLink className="h-3.5 w-3.5" />
+              Open <ExternalLink className="h-3.5 w-3.5" />
             </a>
           </div>
         </>

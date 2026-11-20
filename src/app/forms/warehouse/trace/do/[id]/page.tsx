@@ -25,6 +25,7 @@ import { SmartQrCard } from "@/components/warehouse/SmartQrCard"
 import { LocationCheckIn } from "@/components/warehouse/LocationCheckIn"
 
 function formatSku(sku: string) {
+  if (sku === "LWI_500_24" || sku === "lwi_500_24") return "LWI BLUE 500ML X 24"
   return sku.replace("p800_", "800ml × ").replace("p425_", "425ml × ").toUpperCase()
 }
 
@@ -113,7 +114,7 @@ export default async function DistributionTracePage({ params }: { params: Promis
       timeline.push({
         id: `gp-evt-${evt.id}`,
         title: GATEPASS_STATUS_LABELS[evt.toStatus] || evt.toStatus.replaceAll("_", " "),
-        subtitle: `${evt.actorLabel || evt.actorUser?.name || "Sistem"} (${linkedGatePass.gatePassNo})`,
+        subtitle: `${evt.actorLabel || evt.actorUser?.name || "System"} (${linkedGatePass.gatePassNo})`,
         remarks: evt.remarks,
         timestamp: evt.occurredAt,
         source,
@@ -184,7 +185,7 @@ export default async function DistributionTracePage({ params }: { params: Promis
             href={`/forms/warehouse/distribution/${order.id}/pod`}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-black text-slate-800 shadow-sm transition hover:bg-slate-900 hover:text-white"
           >
-            <Printer className="h-4 w-4" /> Cetak DO (PDF)
+            <Printer className="h-4 w-4" /> Print DO (PDF)
           </Link>
           <span
             className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider ${
@@ -206,7 +207,7 @@ export default async function DistributionTracePage({ params }: { params: Promis
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-cyan-400/20 border border-cyan-300/40 px-3 py-1 text-xs font-black uppercase tracking-wider text-cyan-200">
-                  <ShieldCheck className="h-4 w-4 text-cyan-300" /> Pautan Gatepass &amp; Kawalan Pelepasan
+                  <ShieldCheck className="h-4 w-4 text-cyan-300" /> Linked Gatepass &amp; Clearance Control
                 </span>
                 <span className="rounded-full bg-emerald-400/20 border border-emerald-300/40 px-3 py-1 text-xs font-black uppercase tracking-wider text-emerald-200">
                   {linkedGatePass.status.replaceAll("_", " ")}
@@ -216,35 +217,35 @@ export default async function DistributionTracePage({ params }: { params: Promis
               <div className="mt-3 flex flex-wrap items-baseline gap-3">
                 <h2 className="text-2xl md:text-3xl font-black text-white">{linkedGatePass.gatePassNo}</h2>
                 <span className="text-xs font-semibold text-cyan-200">
-                  Pelanggan: <strong className="text-white">{linkedGatePass.customerName}</strong>
+                  Customer: <strong className="text-white">{linkedGatePass.customerName}</strong>
                 </span>
               </div>
 
               <div className="mt-4 grid gap-3 sm:grid-cols-3 text-xs">
                 <div className="rounded-xl bg-white/10 p-3 backdrop-blur-sm border border-white/10">
                   <span className="text-[10px] uppercase tracking-wider text-cyan-200/80 font-bold block">
-                    No. Plat Lori (Fizikal)
+                    Vehicle Plate No. (Physical)
                   </span>
                   <span className="font-mono font-black text-sm text-white mt-0.5 block">
-                    {linkedGatePass.checkedInVehicleNo || linkedGatePass.vehicleNo || "Menunggu pemandu"}
+                    {linkedGatePass.checkedInVehicleNo || linkedGatePass.vehicleNo || "Awaiting driver"}
                   </span>
                 </div>
 
                 <div className="rounded-xl bg-white/10 p-3 backdrop-blur-sm border border-white/10">
                   <span className="text-[10px] uppercase tracking-wider text-cyan-200/80 font-bold block">
-                    Nama Pemandu
+                    Driver Name
                   </span>
                   <span className="font-bold text-sm text-white mt-0.5 block">
-                    {linkedGatePass.checkedInDriverName || linkedGatePass.driverName || "Belum direkod"}
+                    {linkedGatePass.checkedInDriverName || linkedGatePass.driverName || "Not recorded"}
                   </span>
                 </div>
 
                 <div className="rounded-xl bg-white/10 p-3 backdrop-blur-sm border border-white/10">
                   <span className="text-[10px] uppercase tracking-wider text-cyan-200/80 font-bold block">
-                    Muatan Pallet Kayu
+                    Wooden Pallet Load
                   </span>
                   <span className="font-black text-sm text-white mt-0.5 block">
-                    {linkedGatePass.actualPalletQty ?? linkedGatePass.plannedPalletQty} Pallet
+                    {linkedGatePass.actualPalletQty ?? linkedGatePass.plannedPalletQty} Pallets
                   </span>
                 </div>
               </div>
@@ -255,7 +256,7 @@ export default async function DistributionTracePage({ params }: { params: Promis
                 href={`/forms/warehouse/gatepass/${linkedGatePass.id}`}
                 className="inline-flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-5 py-3.5 text-xs font-black text-slate-950 shadow-md hover:bg-cyan-300 active:scale-98 transition-all"
               >
-                <span>Buka Skrin Operasi Gatepass</span>
+                <span>Open Gatepass Operations</span>
                 <ExternalLink className="h-4 w-4" />
               </Link>
 
@@ -265,7 +266,7 @@ export default async function DistributionTracePage({ params }: { params: Promis
                   className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/10 border border-white/20 px-4 py-2.5 text-xs font-bold text-white hover:bg-white/20 transition-all"
                 >
                   <Layers className="h-4 w-4 text-amber-300" />
-                  <span>Lejar Pallet: {linkedGatePass.palletTransfers[0].transferNo}</span>
+                  <span>Pallet Ledger: {linkedGatePass.palletTransfers[0].transferNo}</span>
                 </Link>
               )}
             </div>
@@ -276,14 +277,14 @@ export default async function DistributionTracePage({ params }: { params: Promis
           <div className="flex items-center gap-3 text-xs text-slate-600">
             <ClipboardCheck className="h-5 w-5 text-slate-400 shrink-0" />
             <span>
-              DO ini belum dipautkan ke Gatepass pergerakan kenderaan. Anda boleh memautkannya di modul Gatepass untuk pengesahan pintu masuk automatik.
+              This DO is not linked to a vehicle Gatepass yet. You can link it in the Gatepass module for automated gate clearance.
             </span>
           </div>
           <Link
             href="/forms/warehouse/gatepass"
             className="text-xs font-black text-cyan-700 hover:underline shrink-0 ml-4"
           >
-            Pautkan di Gatepass ➔
+            Link in Gatepass ➔
           </Link>
         </div>
       )}
@@ -295,20 +296,20 @@ export default async function DistributionTracePage({ params }: { params: Promis
           <section className="rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
             <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Destinasi</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Destination</p>
                 <p className="mt-1.5 text-lg font-black text-emerald-400">{order.destination}</p>
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Jumlah Kuantiti</p>
-                <p className="mt-1.5 text-3xl font-black">{totalQty.toLocaleString()} <span className="text-xs font-bold text-slate-400">kotak</span></p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Quantity</p>
+                <p className="mt-1.5 text-3xl font-black">{totalQty.toLocaleString()} <span className="text-xs font-bold text-slate-400">cartons</span></p>
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Pemandu Lori</p>
-                <p className="mt-1.5 font-bold text-white">{order.driverName || linkedGatePass?.driverName || "Belum direkod"}</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Truck Driver</p>
+                <p className="mt-1.5 font-bold text-white">{order.driverName || linkedGatePass?.driverName || "Not recorded"}</p>
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">No. Kenderaan</p>
-                <p className="mt-1.5 font-mono font-black text-white">{order.vehicleNo || linkedGatePass?.vehicleNo || "Belum direkod"}</p>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Vehicle No.</p>
+                <p className="mt-1.5 font-mono font-black text-white">{order.vehicleNo || linkedGatePass?.vehicleNo || "Not recorded"}</p>
               </div>
             </div>
           </section>
@@ -318,23 +319,23 @@ export default async function DistributionTracePage({ params }: { params: Promis
             <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
               <div className="mb-4 flex items-center gap-2 text-indigo-700">
                 <ClipboardList className="h-5 w-5" />
-                <h2 className="font-black text-slate-950">Butiran Penghantaran</h2>
+                <h2 className="font-black text-slate-950">Delivery Details</h2>
               </div>
               <dl className="space-y-3 text-xs">
                 <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500 font-bold uppercase">Disediakan Oleh</dt>
+                  <dt className="text-slate-500 font-bold uppercase">Prepared By</dt>
                   <dd className="text-right font-black text-slate-900">{order.createdBy.name}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500 font-bold uppercase">Kaedah Hantar</dt>
+                  <dt className="text-slate-500 font-bold uppercase">Delivery Method</dt>
                   <dd className="text-right font-bold text-slate-900">{order.distributionMethod}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500 font-bold uppercase">Tarikh Dicipta</dt>
+                  <dt className="text-slate-500 font-bold uppercase">Created Date</dt>
                   <dd className="text-right font-bold text-slate-800">{dateTime(order.createdAt)}</dd>
                 </div>
                 <div className="flex justify-between gap-4">
-                  <dt className="text-slate-500 font-bold uppercase">Tarikh Pengagihan</dt>
+                  <dt className="text-slate-500 font-bold uppercase">Dispatch Date</dt>
                   <dd className="text-right font-bold text-slate-800">{dateTime(order.distributionDate)}</dd>
                 </div>
               </dl>
@@ -351,19 +352,19 @@ export default async function DistributionTracePage({ params }: { params: Promis
         <div className="border-b border-slate-200 px-6 py-4 bg-slate-50/60 flex items-center justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-700">Batch Manifest</p>
-            <h2 className="mt-0.5 text-lg font-black text-slate-950">Senarai Barangan &amp; Batch No</h2>
+            <h2 className="mt-0.5 text-lg font-black text-slate-950">Dispatched Items &amp; Batch Manifest</h2>
           </div>
-          <span className="text-xs font-black text-slate-500">{order.items.length} jenis item</span>
+          <span className="text-xs font-black text-slate-500">{order.items.length} item line{order.items.length === 1 ? "" : "s"}</span>
         </div>
         <div className="divide-y divide-slate-100">
           {order.items.map((item) => (
             <div key={item.id} className="grid gap-3 px-6 py-4 sm:grid-cols-[1fr_1fr_auto] sm:items-center">
               <div>
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Produk</p>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Product</p>
                 <p className="mt-0.5 font-bold text-slate-900 text-sm">{formatSku(item.sku)}</p>
               </div>
               <div>
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Nombor Batch</p>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Batch Number</p>
                 <Link
                   href={`/forms/warehouse/inventory/batch/${encodeURIComponent(item.batchNumber)}?sku=${encodeURIComponent(item.sku)}`}
                   className="mt-0.5 inline-flex items-center gap-1 font-mono text-sm font-black text-cyan-800 hover:text-cyan-950 hover:underline"
@@ -373,8 +374,8 @@ export default async function DistributionTracePage({ params }: { params: Promis
                 </Link>
               </div>
               <div className="text-left sm:text-right">
-                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Kuantiti</p>
-                <p className="mt-0.5 text-2xl font-black text-emerald-700">{item.qtySent.toLocaleString()} <span className="text-xs text-slate-500 font-bold">kotak</span></p>
+                <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Quantity</p>
+                <p className="mt-0.5 text-2xl font-black text-emerald-700">{item.qtySent.toLocaleString()} <span className="text-xs text-slate-500 font-bold">cartons</span></p>
               </div>
             </div>
           ))}
@@ -385,9 +386,9 @@ export default async function DistributionTracePage({ params }: { params: Promis
       <section className="rounded-3xl border border-slate-200 bg-white shadow-sm p-6 md:p-8">
         <div className="border-b border-slate-100 pb-4 mb-6">
           <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-800">Unified Lifecycle Journey</p>
-          <h2 className="mt-1 text-xl font-black text-slate-950">Kronologi Penuh Pergerakan &amp; Keselamatan</h2>
+          <h2 className="mt-1 text-xl font-black text-slate-950">Full Logistics &amp; Security Timeline</h2>
           <p className="text-xs text-slate-500 mt-1">
-            Mengintegrasikan jejak permohonan Gatepass, rekod pos pintu keselamatan, pengesahan pemuatan gudang, dan imbasan GPS perjalanan.
+            Integrates Gatepass requests, guardhouse gate security records, warehouse loading verification, and live transit GPS check-ins.
           </p>
         </div>
 
@@ -463,7 +464,7 @@ export default async function DistributionTracePage({ params }: { params: Promis
                       rel="noreferrer"
                       className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-sky-50 px-2.5 py-1 text-xs font-black text-sky-700 hover:bg-sky-100 transition-colors"
                     >
-                      <MapPin className="h-3.5 w-3.5" /> Lihat Lokasi GPS · ±{Math.round(item.location.accuracy || 0)}m
+                      <MapPin className="h-3.5 w-3.5" /> View GPS Location · ±{Math.round(item.location.accuracy || 0)}m
                     </a>
                   )}
                 </div>
@@ -480,7 +481,7 @@ export default async function DistributionTracePage({ params }: { params: Promis
             <Boxes className="h-5 w-5 text-amber-700" />
             <h2 className="font-black text-amber-950">Return / Quarantine</h2>
           </div>
-          <p className="mt-2 text-xs text-amber-800">DO ini mempunyai {order.returns.length} rekod pemulangan.</p>
+          <p className="mt-2 text-xs text-amber-800">This DO has {order.returns.length} return record{order.returns.length === 1 ? "" : "s"}.</p>
         </section>
       )}
     </div>

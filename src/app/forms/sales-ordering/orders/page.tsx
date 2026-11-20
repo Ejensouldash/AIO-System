@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic"
 
 import Link from "next/link"
 import { redirect } from "next/navigation"
+import { Printer } from "lucide-react"
 import { prisma } from "@/lib/prisma"
 import { canAccessSalesOrderingTab, firstSalesOrderingPath, getSalesOrderingAccess } from "@/lib/sales-ordering/access"
 
@@ -9,7 +10,12 @@ export default async function SalesOrdersPage() {
   const access = await getSalesOrderingAccess()
   if (!access) redirect("/dashboard")
   if (!canAccessSalesOrderingTab(access, "orders")) redirect(firstSalesOrderingPath(access))
-  const orders = await prisma.salesOrder.findMany({ orderBy: { createdAt: "desc" }, take: 100, include: { customer: true, items: true, createdBy: { select: { name: true } } } })
+  const orders = await prisma.salesOrder.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 100,
+    include: { customer: true, items: true, createdBy: { select: { name: true } } },
+  })
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -39,11 +45,11 @@ export default async function SalesOrdersPage() {
                 <th className="px-5 py-3">Items</th>
                 <th className="px-5 py-3">Total</th>
                 <th className="px-5 py-3">Status</th>
-                <th></th>
+                <th className="px-5 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {orders.map(order => (
+              {orders.map((order) => (
                 <tr key={order.id} className="hover:bg-slate-50">
                   <td className="px-5 py-4">
                     <p className="font-black text-slate-900">{order.internalSoNo}</p>
@@ -53,20 +59,34 @@ export default async function SalesOrdersPage() {
                     <p className="font-bold text-slate-800">{order.customer.legalName}</p>
                     <p className="text-xs text-slate-400">{order.customer.customerCode}</p>
                   </td>
-                  <td className="px-5 py-4 text-slate-600">{order.poNumber || "-"}</td>
+                  <td className="px-5 py-4 text-slate-600 font-mono text-xs">{order.poNumber || "-"}</td>
                   <td className="px-5 py-4 text-slate-600">{order.items.length}</td>
                   <td className="px-5 py-4 font-black text-slate-900">
                     RM {Number(order.grandTotal).toLocaleString("en-MY", { minimumFractionDigits: 2 })}
                   </td>
                   <td className="px-5 py-4">
-                    <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700">
+                    <span className="rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-xs font-black text-emerald-700">
                       {order.status}
                     </span>
                   </td>
                   <td className="px-5 py-4 text-right">
-                    <Link href={`/forms/sales-ordering/orders/${order.id}`} className="font-black text-cyan-700">
-                      View
-                    </Link>
+                    <div className="flex items-center justify-end gap-2.5">
+                      <a
+                        href={`/api/sales-ordering/pdf/so/${order.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-black text-slate-700 hover:border-slate-950 hover:bg-slate-950 hover:text-white transition shadow-xs"
+                        title="Download / Print PDF"
+                      >
+                        <Printer className="h-3.5 w-3.5" /> PDF
+                      </a>
+                      <Link
+                        href={`/forms/sales-ordering/orders/${order.id}`}
+                        className="rounded-lg bg-cyan-50 border border-cyan-200 px-3 py-1.5 text-xs font-black text-cyan-800 hover:bg-cyan-600 hover:text-white transition shadow-xs"
+                      >
+                        View
+                      </Link>
+                    </div>
                   </td>
                 </tr>
               ))}
