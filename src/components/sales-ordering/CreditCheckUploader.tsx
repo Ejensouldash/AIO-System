@@ -30,18 +30,6 @@ const stageAlias: Record<ProgressStage, string> = {
   COMPLETING: "RECONCILING",
 }
 
-function uploadToR2(url: string, file: File, onProgress: (fraction: number) => void) {
-  return new Promise<void>((resolve, reject) => {
-    const request = new XMLHttpRequest()
-    request.open("PUT", url)
-    request.setRequestHeader("Content-Type", "application/pdf")
-    request.upload.onprogress = event => event.lengthComputable && onProgress(event.loaded / event.total)
-    request.onerror = () => reject(new Error("Upload connection to Cloudflare R2 was interrupted."))
-    request.onload = () => request.status >= 200 && request.status < 300 ? resolve() : reject(new Error(`PDF upload failed (${request.status}).`))
-    request.send(file)
-  })
-}
-
 async function readJson(response: Response) {
   const text = await response.text()
   try {
@@ -94,39 +82,50 @@ export function CreditCheckUploader({ existingCase }: { existingCase?: { id: str
   async function start() {
     if ((!existingCase && !po) || !soa || busy) return
     setStage("PREPARING")
-    setProgress(4)
+    setProgress(5)
     setElapsed(0)
     setError("")
     let pollTimer: number | undefined
     try {
-      const payload: any = { soaName: soa.name, soaSize: soa.size, checkMode }
+      const formData = new FormData()
+      formData.append("checkMode", checkMode)
+      formData.append("soa", soa)
       if (existingCase) {
-        payload.existingCaseId = existingCase.id
-      } else {
-        payload.poName = po!.name
-        payload.poSize = po!.size
+        formData.append("existingCaseId", existingCase.id)
+      } else if (po) {
+        formData.append("po", po)
       }
-
-      const preparedResponse = await fetch("/api/sales-ordering/credit-check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
-      const prepared = await readJson(preparedResponse)
-      if (!preparedResponse.ok) throw new Error(String(prepared.error || "Failed to prepare upload."))
 
       setStage("UPLOADING")
-      let poProgress = existingCase ? 1 : 0
-      let soaProgress = 0
-      const updateUploadProgress = () => setProgress(8 + Math.round(((poProgress + soaProgress) / 2) * 20))
-      
-      const uploadTasks = [
-        uploadToR2(String(prepared.soaUploadUrl), soa, value => { soaProgress = value; updateUploadProgress() })
-      ]
-      
-      if (!existingCase && po) {
-        uploadTasks.push(uploadToR2(String(prepared.poUploadUrl), po, value => { poProgress = value; updateUploadProgress() }))
-      }
+      const uploadResult = await new Promise<{ id: string }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest()
+        xhr.open("POST", "/api/sales-ordering/credit-check/upload")
+        xhr.upload.onprogress = event => {
+          if (event.lengthComputable) {
+            setProgress(8 + Math.round((event.loaded / event.total) * 22))
+          }
+        }
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              resolve(JSON.parse(xhr.responseText))
+            } catch {
+              reject(new Error("Invalid response received from server."))
+            }
+          } else {
+            try {
+              const err = JSON.parse(xhr.responseText)
+              reject(new Error(err.error || `Upload failed (${xhr.status}).`))
+            } catch {
+              reject(new Error(`Upload failed (${xhr.status}).`))
+            }
+          }
+        }
+        xhr.onerror = () => reject(new Error("Upload connection was interrupted. Please try again."))
+        xhr.send(formData)
+      })
 
-      await Promise.all(uploadTasks)
-
-      const caseId = String(prepared.id)
+      const caseId = uploadResult.id
       setStage("READING_FILES")
       setProgress(34)
       const processingPromise = fetch(`/api/sales-ordering/credit-check/${caseId}/process`, { method: "POST" })
