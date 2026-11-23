@@ -71,11 +71,10 @@ const palette = {
   navyLight: "#2B4C7E",
   body: "#1F2937",
   muted: "#4B5563",
-  faint: "#9CA3AF",
+  faint: "#6B7280",
   border: "#CBD5E1",
   borderLight: "#E2E8F0",
   bgSubtle: "#F8FAFC",
-  bgCard: "#F1F5F9",
   lwiBlue: "#0284C7",
   lwiBlueDark: "#0369A1",
   lwiBlueSoft: "#E0F2FE",
@@ -83,45 +82,42 @@ const palette = {
   emerald: "#059669",
   emeraldSoft: "#ECFDF5",
   emeraldBorder: "#A7F3D0",
-  amber: "#D97706",
-  amberSoft: "#FEF3C7",
-  amberBorder: "#FDE68A",
   white: "#FFFFFF",
 }
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 24,
+    paddingTop: 28,
     paddingHorizontal: 28,
-    paddingBottom: 28,
+    paddingBottom: 45,
+    flexDirection: "column",
     fontFamily: "Helvetica",
     fontSize: 8,
     color: palette.body,
     backgroundColor: palette.white,
   },
   topAccentBar: {
-    height: 4,
+    height: 3,
     backgroundColor: palette.lwiBlue,
-    borderRadius: 2,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 10,
+    marginBottom: 8,
     paddingBottom: 8,
-    borderBottomWidth: 1.5,
-    borderBottomColor: palette.borderLight,
+    borderBottomWidth: 0.5,
+    borderBottomColor: palette.border,
   },
   headerLeft: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     width: 340,
   },
   logo: {
     width: 110,
-    height: 42,
+    height: 40,
     marginRight: 12,
     objectFit: "contain",
   },
@@ -132,7 +128,7 @@ const styles = StyleSheet.create({
     fontSize: 9.5,
     fontFamily: "Helvetica-Bold",
     color: palette.navyDark,
-    marginBottom: 1.5,
+    marginBottom: 2,
   },
   companyReg: {
     fontSize: 6.8,
@@ -146,7 +142,7 @@ const styles = StyleSheet.create({
     lineHeight: 1.3,
   },
   headerRight: {
-    width: 170,
+    width: 175,
     alignItems: "flex-end",
   },
   docTitle: {
@@ -157,21 +153,22 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   docSubTitle: {
-    fontSize: 7,
+    fontSize: 6.8,
     fontFamily: "Helvetica-Bold",
-    letterSpacing: 1.5,
+    letterSpacing: 1.2,
     color: palette.lwiBlueDark,
     marginTop: 1,
     textTransform: "uppercase",
+    textAlign: "right",
   },
   soBadge: {
-    marginTop: 4,
+    marginTop: 5,
     paddingVertical: 3,
     paddingHorizontal: 8,
-    borderRadius: 4,
-    backgroundColor: palette.lwiBlueSoft,
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderColor: palette.lwiBlueBorder,
+    backgroundColor: palette.lwiBlueSoft,
+    alignSelf: "flex-end",
   },
   soBadgeText: {
     fontSize: 9,
@@ -179,13 +176,13 @@ const styles = StyleSheet.create({
     color: palette.lwiBlueDark,
   },
   statusBadge: {
-    marginTop: 4,
+    marginTop: 3,
     paddingVertical: 2,
     paddingHorizontal: 7,
-    borderRadius: 3,
-    backgroundColor: palette.emeraldSoft,
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderColor: palette.emeraldBorder,
+    backgroundColor: palette.emeraldSoft,
+    alignSelf: "flex-end",
   },
   statusBadgeText: {
     fontSize: 6.5,
@@ -196,18 +193,17 @@ const styles = StyleSheet.create({
   cardsGrid: {
     flexDirection: "row",
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 8,
   },
   card: {
     flex: 1,
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderColor: palette.border,
-    borderRadius: 5,
-    padding: 7,
-    backgroundColor: palette.bgSubtle,
+    padding: 6,
+    backgroundColor: palette.white,
   },
   cardHeader: {
-    fontSize: 7,
+    fontSize: 6.8,
     fontFamily: "Helvetica-Bold",
     color: palette.lwiBlueDark,
     letterSpacing: 0.5,
@@ -244,17 +240,19 @@ const styles = StyleSheet.create({
     color: palette.navyDark,
   },
   table: {
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderColor: palette.border,
-    borderRadius: 5,
-    overflow: "hidden",
-    marginBottom: 10,
+    flexGrow: 1,
+    marginBottom: 8,
+    flexDirection: "column",
   },
   tableHead: {
     flexDirection: "row",
     backgroundColor: palette.navyDark,
     paddingVertical: 5,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
+    borderBottomWidth: 0.5,
+    borderBottomColor: palette.navyDark,
   },
   th: {
     fontFamily: "Helvetica-Bold",
@@ -268,7 +266,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 0.5,
     borderBottomColor: palette.borderLight,
     paddingVertical: 5,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     alignItems: "center",
   },
   trEven: {
@@ -282,31 +280,32 @@ const styles = StyleSheet.create({
     fontSize: 7.2,
     fontFamily: "Helvetica-Bold",
     color: palette.navyDark,
-    textAlign: "right",
   },
   colNo: { width: "5%", textAlign: "center" },
-  colDesc: { width: "45%" },
+  colDesc: { width: "45%", textAlign: "left", paddingLeft: 4 },
   colUom: { width: "10%", textAlign: "center" },
-  colQty: { width: "12%", textAlign: "right" },
-  colPrice: { width: "13%", textAlign: "right" },
-  colTotal: { width: "15%", textAlign: "right" },
+  colQty: { width: "12%", textAlign: "right", paddingRight: 6 },
+  colPrice: { width: "14%", textAlign: "right", paddingRight: 6 },
+  colTotal: { width: "14%", textAlign: "right", paddingRight: 4 },
   skuCode: {
     fontSize: 6.2,
     fontFamily: "Helvetica-Bold",
     color: palette.lwiBlueDark,
     marginTop: 1,
   },
+  bottomSection: {
+    marginTop: "auto",
+  },
   summaryContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   termsSection: {
-    width: "56%",
-    borderWidth: 1,
-    borderColor: palette.borderLight,
-    borderRadius: 5,
-    padding: 7,
+    width: "55%",
+    borderWidth: 0.5,
+    borderColor: palette.border,
+    padding: 6,
     backgroundColor: palette.bgSubtle,
   },
   termsTitle: {
@@ -322,26 +321,24 @@ const styles = StyleSheet.create({
     lineHeight: 1.35,
   },
   totalsSection: {
-    width: "40%",
-    borderWidth: 1,
+    width: "42%",
+    borderWidth: 0.5,
     borderColor: palette.border,
-    borderRadius: 5,
-    overflow: "hidden",
     backgroundColor: palette.white,
   },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: 3.5,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     borderBottomWidth: 0.5,
     borderBottomColor: palette.borderLight,
   },
   totalRowGrand: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingVertical: 6,
-    paddingHorizontal: 8,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
     backgroundColor: palette.navyDark,
   },
   totalLabel: {
@@ -370,17 +367,15 @@ const styles = StyleSheet.create({
   signaturesGrid: {
     flexDirection: "row",
     justifyContent: "space-between",
-    gap: 12,
-    marginTop: 4,
-    marginBottom: 10,
+    gap: 8,
+    marginTop: 2,
   },
   sigBox: {
     flex: 1,
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderColor: palette.border,
-    borderRadius: 5,
-    padding: 8,
-    minHeight: 70,
+    padding: 6,
+    minHeight: 65,
     justifyContent: "space-between",
     backgroundColor: palette.white,
   },
@@ -391,7 +386,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   sigLine: {
-    borderTopWidth: 1,
+    borderTopWidth: 0.5,
     borderTopColor: palette.navyDark,
     paddingTop: 3,
   },
@@ -405,9 +400,13 @@ const styles = StyleSheet.create({
     color: palette.muted,
   },
   footer: {
-    borderTopWidth: 1,
+    position: "absolute",
+    bottom: 18,
+    left: 28,
+    right: 28,
+    borderTopWidth: 0.5,
     borderTopColor: palette.borderLight,
-    paddingTop: 6,
+    paddingTop: 5,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -484,11 +483,11 @@ export function SalesOrderPdfDocument({
   return (
     <Document title={`Sales Order - ${data.internalSoNo}`} author="Langkawi Water Industry Sdn Bhd">
       <Page size="A4" style={styles.page}>
-        {/* Top colored accent line */}
-        <View style={styles.topAccentBar} />
+        {/* Top colored accent line (repeats on every page) */}
+        <View style={styles.topAccentBar} fixed />
 
-        {/* Header with LWI Logo and Company Info */}
-        <View style={styles.header}>
+        {/* Company Header (repeats on every page) */}
+        <View style={styles.header} fixed>
           <View style={styles.headerLeft}>
             {logoSource ? (
               <Image src={logoSource} style={styles.logo} />
@@ -522,7 +521,7 @@ export function SalesOrderPdfDocument({
           </View>
         </View>
 
-        {/* 3 Meta Cards: Bill To, Ship To, Order Info */}
+        {/* 3 Meta Cards: Bill To, Ship To, Order Info (Page 1) */}
         <View style={styles.cardsGrid}>
           {/* Bill To */}
           <View style={styles.card}>
@@ -580,11 +579,12 @@ export function SalesOrderPdfDocument({
           </View>
         </View>
 
-        {/* Items Table */}
+        {/* Items Table Container (flexGrow: 1 anchors bottom sections cleanly) */}
         <View style={styles.table}>
-          <View style={styles.tableHead}>
+          {/* Table Header (repeats on every page via fixed prop) */}
+          <View style={styles.tableHead} fixed>
             <Text style={[styles.th, styles.colNo]}>#</Text>
-            <Text style={[styles.th, styles.colDesc]}>Item Description & SKU</Text>
+            <Text style={[styles.th, styles.colDesc]}>Item Description &amp; SKU</Text>
             <Text style={[styles.th, styles.colUom]}>UOM</Text>
             <Text style={[styles.th, styles.colQty]}>Qty</Text>
             <Text style={[styles.th, styles.colPrice]}>Unit Price (RM)</Text>
@@ -613,87 +613,95 @@ export function SalesOrderPdfDocument({
           })}
         </View>
 
-        {/* Summary: Terms & Remarks on Left, Totals on Right */}
-        <View style={styles.summaryContainer}>
-          <View style={styles.termsSection}>
-            <Text style={styles.termsTitle}>Commercial Notes & Terms</Text>
-            <Text style={styles.termsText}>
-              1. All payments by cheque / transfer must be made in favour of {LWI_COMPANY_PROFILE.legalName}.
-            </Text>
-            <Text style={styles.termsText}>
-              2. Goods sold are subject to standard warehouse distribution and quality acceptance terms.
-            </Text>
-            <Text style={styles.termsText}>
-              3. Claims for damage or shortage must be reported within 24 hours of delivery order receipt.
-            </Text>
-            {data.orderRemarks && (
-              <Text style={[styles.termsText, { marginTop: 3, fontFamily: "Helvetica-Bold", color: palette.navyDark }]}>
-                Special Instructions: {data.orderRemarks}
+        {/* Bottom Section: Summary & Signatures (wrap={false} prevents awkward page split) */}
+        <View wrap={false} style={styles.bottomSection}>
+          {/* Summary: Terms & Remarks on Left, Totals on Right */}
+          <View style={styles.summaryContainer}>
+            <View style={styles.termsSection}>
+              <Text style={styles.termsTitle}>Commercial Notes &amp; Terms</Text>
+              <Text style={styles.termsText}>
+                1. All payments by cheque / transfer must be made in favour of {LWI_COMPANY_PROFILE.legalName}.
               </Text>
-            )}
-          </View>
-
-          <View style={styles.totalsSection}>
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Total Quantity:</Text>
-              <Text style={styles.totalVal}>{totalQty.toLocaleString("en-MY")} CTN</Text>
-            </View>
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Subtotal:</Text>
-              <Text style={styles.totalVal}>RM {formatMoney(data.subtotal)}</Text>
-            </View>
-            {Number(data.discountTotal || 0) > 0 && (
-              <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>Discount:</Text>
-                <Text style={[styles.totalVal, { color: palette.emerald }]}>
-                  - RM {formatMoney(data.discountTotal)}
+              <Text style={styles.termsText}>
+                2. Goods sold are subject to standard warehouse distribution and quality acceptance terms.
+              </Text>
+              <Text style={styles.termsText}>
+                3. Claims for damage or shortage must be reported within 24 hours of delivery order receipt.
+              </Text>
+              {data.orderRemarks && (
+                <Text style={[styles.termsText, { marginTop: 3, fontFamily: "Helvetica-Bold", color: palette.navyDark }]}>
+                  Special Instructions: {data.orderRemarks}
                 </Text>
+              )}
+            </View>
+
+            <View style={styles.totalsSection}>
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>Total Quantity:</Text>
+                <Text style={styles.totalVal}>{totalQty.toLocaleString("en-MY")} CTN</Text>
               </View>
-            )}
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Sales Tax / SST (0%):</Text>
-              <Text style={styles.totalVal}>RM {formatMoney(data.taxTotal || 0)}</Text>
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>Subtotal:</Text>
+                <Text style={styles.totalVal}>RM {formatMoney(data.subtotal)}</Text>
+              </View>
+              {Number(data.discountTotal || 0) > 0 && (
+                <View style={styles.totalRow}>
+                  <Text style={styles.totalLabel}>Discount:</Text>
+                  <Text style={[styles.totalVal, { color: palette.emerald }]}>
+                    - RM {formatMoney(data.discountTotal)}
+                  </Text>
+                </View>
+              )}
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>Sales Tax / SST (0%):</Text>
+                <Text style={styles.totalVal}>RM {formatMoney(data.taxTotal || 0)}</Text>
+              </View>
+              <View style={styles.totalRowGrand}>
+                <Text style={styles.grandLabel}>Grand Total (MYR):</Text>
+                <Text style={styles.grandVal}>RM {formatMoney(data.grandTotal)}</Text>
+              </View>
             </View>
-            <View style={styles.totalRowGrand}>
-              <Text style={styles.grandLabel}>Grand Total (MYR):</Text>
-              <Text style={styles.grandVal}>RM {formatMoney(data.grandTotal)}</Text>
+          </View>
+
+          {/* Signatures / Endorsement Section */}
+          <View style={styles.signaturesGrid}>
+            <View style={styles.sigBox}>
+              <Text style={styles.sigTitle}>Prepared By</Text>
+              <View style={styles.sigLine}>
+                <Text style={styles.sigName}>{data.createdBy?.name || "Operations"}</Text>
+                <Text style={styles.sigRole}>Sales Ordering &amp; Logistics</Text>
+              </View>
+            </View>
+
+            <View style={styles.sigBox}>
+              <Text style={styles.sigTitle}>Customer Confirmation</Text>
+              <View style={styles.sigLine}>
+                <Text style={styles.sigName}>Authorized Signature &amp; Stamp</Text>
+                <Text style={styles.sigRole}>Name: ____________________ Date: ________</Text>
+              </View>
+            </View>
+
+            <View style={styles.sigBox}>
+              <Text style={styles.sigTitle}>LWI Management Approval</Text>
+              <View style={styles.sigLine}>
+                <Text style={styles.sigName}>Finance &amp; Warehouse Division</Text>
+                <Text style={styles.sigRole}>{LWI_COMPANY_PROFILE.brandName}</Text>
+              </View>
             </View>
           </View>
         </View>
 
-        {/* Signatures / Endorsement Section */}
-        <View style={styles.signaturesGrid}>
-          <View style={styles.sigBox}>
-            <Text style={styles.sigTitle}>Prepared By</Text>
-            <View style={styles.sigLine}>
-              <Text style={styles.sigName}>{data.createdBy?.name || "Operations"}</Text>
-              <Text style={styles.sigRole}>Sales Ordering & Logistics</Text>
-            </View>
-          </View>
-
-          <View style={styles.sigBox}>
-            <Text style={styles.sigTitle}>Customer Confirmation</Text>
-            <View style={styles.sigLine}>
-              <Text style={styles.sigName}>Authorized Signature & Stamp</Text>
-              <Text style={styles.sigRole}>Name: ______________________ Date: ________</Text>
-            </View>
-          </View>
-
-          <View style={styles.sigBox}>
-            <Text style={styles.sigTitle}>LWI Management Approval</Text>
-            <View style={styles.sigLine}>
-              <Text style={styles.sigName}>Finance & Warehouse Division</Text>
-              <Text style={styles.sigRole}>{LWI_COMPANY_PROFILE.brandName}</Text>
-            </View>
-          </View>
-        </View>
-
-        {/* Footer */}
-        <View style={styles.footer}>
+        {/* Pinned Bottom Page Footer with Dynamic Page Numbers */}
+        <View style={styles.footer} fixed>
           <Text style={styles.footerText}>
-            LWI BLUE · Langkawi Water Industry Sdn. Bhd. · System Document Reference: {data.internalSoNo}
+            LWI BLUE · Langkawi Water Industry Sdn. Bhd. · Document Ref: {data.internalSoNo}
           </Text>
-          <Text style={styles.footerText}>Generated: {formatDate(new Date())} · Page 1 of 1</Text>
+          <Text
+            style={styles.footerText}
+            render={({ pageNumber, totalPages }) =>
+              `Generated: ${formatDate(new Date())} · Page ${pageNumber} of ${totalPages}`
+            }
+          />
         </View>
       </Page>
     </Document>
